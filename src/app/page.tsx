@@ -1,103 +1,99 @@
-import Image from "next/image";
+"use client";
+import "./globals.css";
+import dynamic from "next/dynamic";
 
-export default function Home() {
+const BoidsField = dynamic(() => import("./boidsField"), { ssr: false });
+
+export default function Page() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <>
+      <div id="hud">
+        <div><strong>Boids + Anime.js + Text Morph</strong></div>
+        <div>• Mouse near center biases flock in free mode</div>
+        <div>• Press <code>F</code> to toggle follow-attractor in free mode</div>
+        <div>• Use the panel to form / disperse text</div>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+      <BoidsField />
+
+      <div id="panel">
+        <Controls />
+      </div>
+    </>
+  );
+}
+
+import { useBoidsControls } from "@/lib/controls";
+
+function Controls() {
+  const {
+    text, setText, forming, formText, disperse, togglePulse, pulse,
+    cfg, setCfg
+  } = useBoidsControls();
+
+  return (
+    <>
+      <label>
+        Target Text
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Type something…"
+        />
+      </label>
+
+      <div className="row">
+        <button onClick={formText} disabled={forming}>Form Text</button>
+        <button onClick={disperse} disabled={!forming}>Disperse</button>
+        <button onClick={togglePulse}>{pulse ? "Stop Density Pulse" : "Start Density Pulse"}</button>
+      </div>
+
+      <fieldset style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 10 }}>
+        <legend style={{ padding: "0 6px" }}>Flocking</legend>
+        <div className="row">
+          <label>
+            Count&nbsp;
+            <input
+              type="range" min={60} max={600} step={1}
+              value={cfg.count}
+              onChange={(e) => setCfg({ ...cfg, count: Number(e.target.value) })}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </label>
+          <label>
+            Speed&nbsp;
+            <input
+              type="range" min={1} max={5} step={0.1}
+              value={cfg.speed}
+              onChange={(e) => setCfg({ ...cfg, speed: Number(e.target.value) })}
+            />
+          </label>
+          <label>
+            Sep&nbsp;
+            <input
+              type="range" min={10} max={60} step={1}
+              value={cfg.separationRadius}
+              onChange={(e) => setCfg({ ...cfg, separationRadius: Number(e.target.value) })}
+            />
+          </label>
+          <label>
+            Align&nbsp;
+            <input
+              type="range" min={30} max={140} step={1}
+              value={cfg.alignRadius}
+              onChange={(e) => setCfg({ ...cfg, alignRadius: Number(e.target.value) })}
+            />
+          </label>
+          <label>
+            Coh&nbsp;
+            <input
+              type="range" min={30} max={140} step={1}
+              value={cfg.cohesionRadius}
+              onChange={(e) => setCfg({ ...cfg, cohesionRadius: Number(e.target.value) })}
+            />
+          </label>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </fieldset>
+    </>
   );
 }
