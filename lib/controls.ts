@@ -1,7 +1,9 @@
+// lib/controls.ts
 "use client";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Cfg = {
+export type Cfg = {
   count: number;
   speed: number;
   maxForce: number;
@@ -11,9 +13,16 @@ type Cfg = {
   alignStrength: number;
   cohesionStrength: number;
   separationStrength: number;
+  orbitRadius: number;
+  repelRadius: number;
+
+  // NEW — density & spacing controls
+  autoDensity: boolean;
+  densityFactor: number;     // scales boids from sampled points
+  letterSpacingPx: number;   // manual extra spacing when autoDensity=false
 };
 
-const defaultCfg: Cfg = {
+export const defaultCfg: Cfg = {
   count: 180,
   speed: 2.2,
   maxForce: 0.06,
@@ -22,25 +31,31 @@ const defaultCfg: Cfg = {
   separationRadius: 24,
   alignStrength: 0.8,
   cohesionStrength: 0.35,
-  separationStrength: 1.2
+  separationStrength: 1.2,
+  orbitRadius: 36,
+  repelRadius: 14,
+
+  autoDensity: true,
+  densityFactor: 0.55,   // ~55% of sampled points becomes boids
+  letterSpacingPx: 0,
 };
 
 export function useBoidsControls() {
-  const [text, setText] = useState("HELLO, ROSS");
+  const [text, setText] = useState("THIS IS A TEST");
   const [cfg, setCfg] = useState<Cfg>(defaultCfg);
   const formingRef = useRef(false);
   const [forming, setForming] = useState(false);
   const [pulse, setPulse] = useState(false);
 
-  const dispatch = (name: string, detail?: any) => {
+  const dispatch = (name: string, detail?: any) =>
     window.dispatchEvent(new CustomEvent(name, { detail }));
-  };
 
   const formText = useCallback(() => {
     formingRef.current = true;
     setForming(true);
-    dispatch("boids/form", { text });
-  }, [text]);
+    // pass all relevant cfg so the field can compute auto density/spacing
+    dispatch("boids/form", { text, cfg });
+  }, [text, cfg]);
 
   const disperse = useCallback(() => {
     formingRef.current = false;
@@ -48,6 +63,7 @@ export function useBoidsControls() {
     dispatch("boids/disperse");
   }, []);
 
+  // keep sim in sync when sliders move
   useEffect(() => {
     dispatch("boids/cfg", cfg);
   }, [cfg]);
@@ -60,5 +76,10 @@ export function useBoidsControls() {
     });
   }, []);
 
-  return { text, setText, forming, formText, disperse, cfg, setCfg, pulse, togglePulse };
+  return {
+    text, setText,
+    cfg, setCfg,
+    forming, formText, disperse,
+    pulse, togglePulse,
+  };
 }
