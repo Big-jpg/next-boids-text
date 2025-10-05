@@ -2,8 +2,17 @@
 "use client";
 
 import { useBoidsControls } from "@/lib/controls";
+import React from "react";
 
-export default function ControlsPanel() {
+type Props = {
+  /** When true (default), panel uses fixed/floating chrome.
+      When false, the caller provides outer positioning/animation. */
+  floating?: boolean;
+  /** Optional inline styles merged into the outer wrapper. */
+  style?: React.CSSProperties;
+};
+
+export default function ControlsPanel({ floating = true, style }: Props) {
   const {
     text, setText,
     cfg, setCfg,
@@ -11,8 +20,13 @@ export default function ControlsPanel() {
     pulse, togglePulse
   } = useBoidsControls();
 
+  // choose wrapper style based on floating vs embedded
+  const outerStyle = floating
+    ? { ...wrap(), ...style }
+    : { ...embedWrap(), ...style };
+
   return (
-    <div style={wrap()}>
+    <div style={outerStyle}>
       <label style={{ display: "block", marginBottom: 8 }}>
         <div style={label()}>Target Text</div>
         <input
@@ -97,14 +111,6 @@ export default function ControlsPanel() {
                  value={cfg.densityFactor}
                  onChange={(e) => setCfg({ ...cfg, densityFactor: Number(e.target.value) })}/>
         </Row>
-
-        {!cfg.autoDensity && (
-          <Row label={`Letter Spacing (${cfg.letterSpacingPx}px)`}>
-            <input type="range" min={0} max={40} step={1}
-                   value={cfg.letterSpacingPx}
-                   onChange={(e) => setCfg({ ...cfg, letterSpacingPx: Number(e.target.value) })}/>
-          </Row>
-        )}
       </fieldset>
     </div>
   );
@@ -119,6 +125,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     </label>
   );
 }
+
 const wrap = () => ({
   position: "fixed" as const,
   right: 12, bottom: 12, zIndex: 10,
@@ -129,6 +136,17 @@ const wrap = () => ({
   backdropFilter: "blur(8px)",
   color: "#cbd5e1", fontSize: 13,
 });
+
+/** Non-fixed outer — lets a parent animate/accordion/hide completely */
+const embedWrap = () => ({
+  width: "min(480px, 92vw)",
+  padding: 12, borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.06)",
+  background: "rgba(20,24,32,0.6)",
+  backdropFilter: "blur(8px)",
+  color: "#cbd5e1", fontSize: 13,
+});
+
 const label = () => ({ fontSize: 12, opacity: 0.8, marginBottom: 6 });
 const input = () => ({
   width: "100%", padding: "8px 10px", borderRadius: 10,
