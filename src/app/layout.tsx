@@ -1,6 +1,6 @@
 // src/app/layout.tsx
 import "./globals.css";
-import { Analytics } from "@vercel/analytics/react";
+import { Analytics } from "@vercel/analytics/next"
 import ControlsPanel from "@/components/ControlsPanel";
 import { useState } from "react";
 
