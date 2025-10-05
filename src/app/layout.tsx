@@ -1,3 +1,5 @@
+
+
 export const metadata = {
   title: "Boids → Text (Next.js + Anime.js)",
   description: "Flocking boids that morph into text and back."

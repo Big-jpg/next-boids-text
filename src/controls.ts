@@ -14,19 +14,19 @@ type Cfg = {
 };
 
 const defaultCfg: Cfg = {
-  count: 180,
-  speed: 2.2,
+  count: 688,
+  speed: 3.0,
   maxForce: 0.06,
-  alignRadius: 70,
-  cohesionRadius: 70,
-  separationRadius: 24,
+  alignRadius: 87,
+  cohesionRadius: 106,
+  separationRadius: 48,
   alignStrength: 0.8,
   cohesionStrength: 0.35,
   separationStrength: 1.2
 };
 
 export function useBoidsControls() {
-  const [text, setText] = useState("HELLO, ROSS");
+  const [text, setText] = useState("THIS IS A TEST");
   const [cfg, setCfg] = useState<Cfg>(defaultCfg);
   const formingRef = useRef(false);
   const [forming, setForming] = useState(false);

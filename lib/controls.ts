@@ -23,7 +23,7 @@ export type Cfg = {
 };
 
 export const defaultCfg: Cfg = {
-  count: 740,
+  count: 688,
   speed: 3.0,
   maxForce: 0.06,
   separationRadius: 48,
@@ -32,16 +32,16 @@ export const defaultCfg: Cfg = {
   alignStrength: 0.8,
   cohesionStrength: 0.35,
   separationStrength: 1.2,
-  orbitRadius: 18,
-  repelRadius: 20,
+  orbitRadius: 12,
+  repelRadius: 28,
 
   autoDensity: true,
-  densityFactor: 0.55,   // ~55% of sampled points becomes boids
+  densityFactor: 0.82,   // ~55% of sampled points becomes boids
   letterSpacingPx: 0,
 };
 
 export function useBoidsControls() {
-  const [text, setText] = useState("THIS IS A TEST");
+  const [text, setText] = useState("B O I D S");
   const [cfg, setCfg] = useState<Cfg>(defaultCfg);
   const formingRef = useRef(false);
   const [forming, setForming] = useState(false);
