@@ -1,3 +1,4 @@
+"use client"
 // src/app/layout.tsx
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
