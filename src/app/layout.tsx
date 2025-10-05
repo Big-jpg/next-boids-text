@@ -36,9 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         {children}
-        {/* Toggle + ControlsPanel client-side */}
         <ClientControlsWrapper />
-        {/* Vercel Analytics */}
         <Analytics />
       </body>
     </html>
