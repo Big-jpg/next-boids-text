@@ -1,14 +1,12 @@
-// components/ControlsPanel.tsx
 "use client";
 
-import { useBoidsControls } from "@/lib/controls";
 import React from "react";
+import { useBoidsControls } from "@/lib/controls";
 
 type Props = {
   /** When true (default), panel uses fixed/floating chrome.
-      When false, the caller provides outer positioning/animation. */
+      When false, caller provides outer positioning/animation. */
   floating?: boolean;
-  /** Optional inline styles merged into the outer wrapper. */
   style?: React.CSSProperties;
 };
 
@@ -20,33 +18,31 @@ export default function ControlsPanel({ floating = true, style }: Props) {
     pulse, togglePulse
   } = useBoidsControls();
 
-  // choose wrapper style based on floating vs embedded
-  const outerStyle = floating
-    ? { ...wrap(), ...style }
-    : { ...embedWrap(), ...style };
+  const outerStyle = floating ? floatingWrapStyle : embeddedWrapStyle;
 
   return (
-    <div style={outerStyle}>
+    <div style={{ ...outerStyle, ...style }}>
       <label style={{ display: "block", marginBottom: 8 }}>
-        <div style={label()}>Target Text</div>
+        <div style={smallLabel}>Target Text</div>
         <input
-          data-boids-text
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type something…"
-          style={input()}
+          style={textInput}
         />
       </label>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-        <button onClick={formText} disabled={forming} style={btn()}>Form Text</button>
-        <button onClick={disperse} disabled={!forming} style={btn()}>Disperse</button>
-        <button onClick={togglePulse} style={btn()}>{pulse ? "Stop Density Pulse" : "Start Density Pulse"}</button>
+        <button onClick={formText} disabled={forming} style={buttonStyle}>Form Text</button>
+        <button onClick={disperse} disabled={!forming} style={buttonStyle}>Disperse</button>
+        <button onClick={togglePulse} style={buttonStyle}>
+          {pulse ? "Stop Density Pulse" : "Start Density Pulse"}
+        </button>
       </div>
 
-      <fieldset style={fs()}>
-        <legend style={legend()}>Flocking</legend>
+      <fieldset style={fieldsetStyle}>
+        <legend style={legendStyle}>Flocking</legend>
 
         <Row label={`Count (${cfg.count})`}>
           <input type="range" min={60} max={1200} step={1}
@@ -79,8 +75,8 @@ export default function ControlsPanel({ floating = true, style }: Props) {
         </Row>
       </fieldset>
 
-      <fieldset style={fs()}>
-        <legend style={legend()}>Orbit Targeting</legend>
+      <fieldset style={fieldsetStyle}>
+        <legend style={legendStyle}>Orbit Targeting</legend>
 
         <Row label={`Orbit Radius (${cfg.orbitRadius})`}>
           <input type="range" min={12} max={120} step={1}
@@ -95,8 +91,8 @@ export default function ControlsPanel({ floating = true, style }: Props) {
         </Row>
       </fieldset>
 
-      <fieldset style={fs()}>
-        <legend style={legend()}>Density & Spacing</legend>
+      <fieldset style={fieldsetStyle}>
+        <legend style={legendStyle}>Density & Spacing</legend>
 
         <Row label={`Auto Density`}>
           <input
@@ -116,7 +112,7 @@ export default function ControlsPanel({ floating = true, style }: Props) {
   );
 }
 
-/* ---------- UI helpers ---------- */
+/* --- styles & helpers --- */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "grid", gridTemplateColumns: "180px 1fr", alignItems: "center", gap: 10, margin: "6px 0" }}>
@@ -126,44 +122,59 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-const wrap = () => ({
-  position: "fixed" as const,
-  right: 12, bottom: 12, zIndex: 10,
+const floatingWrapStyle: React.CSSProperties = {
+  position: "fixed",
+  right: 12,
+  bottom: 12,
+  zIndex: 10,
   width: "min(480px, 92vw)",
-  padding: 12, borderRadius: 12,
+  padding: 12,
+  borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.06)",
   background: "rgba(20,24,32,0.6)",
   backdropFilter: "blur(8px)",
-  color: "#cbd5e1", fontSize: 13,
-});
+  color: "#cbd5e1",
+  fontSize: 13,
+};
 
-/** Non-fixed outer — lets a parent animate/accordion/hide completely */
-const embedWrap = () => ({
+const embeddedWrapStyle: React.CSSProperties = {
   width: "min(480px, 92vw)",
-  padding: 12, borderRadius: 12,
+  padding: 12,
+  borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.06)",
   background: "rgba(20,24,32,0.6)",
   backdropFilter: "blur(8px)",
-  color: "#cbd5e1", fontSize: 13,
-});
+  color: "#cbd5e1",
+  fontSize: 13,
+};
 
-const label = () => ({ fontSize: 12, opacity: 0.8, marginBottom: 6 });
-const input = () => ({
-  width: "100%", padding: "8px 10px", borderRadius: 10,
+const smallLabel: React.CSSProperties = { fontSize: 12, opacity: 0.8, marginBottom: 6 };
+
+const textInput: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.06)",
-  background: "#0f1319", color: "#cbd5e1", outline: "none",
-});
-const btn = () => ({
-  appearance: "none" as const,
+  background: "#0f1319",
+  color: "#cbd5e1",
+  outline: "none",
+};
+
+const buttonStyle: React.CSSProperties = {
+  appearance: "none",
   border: "1px solid rgba(255,255,255,0.06)",
   background: "#11151c",
   color: "#cbd5e1",
   padding: "8px 10px",
   borderRadius: 10,
   cursor: "pointer",
-});
-const fs = () => ({
+};
+
+const fieldsetStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 12, padding: 10, marginBottom: 12,
-});
-const legend = () => ({ padding: "0 6px", opacity: 0.9 });
+  borderRadius: 12,
+  padding: 10,
+  marginBottom: 12,
+};
+
+const legendStyle: React.CSSProperties = { padding: "0 6px", opacity: 0.9 };

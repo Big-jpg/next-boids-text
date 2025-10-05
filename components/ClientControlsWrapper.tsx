@@ -3,27 +3,31 @@
 import { useEffect, useRef, useState } from "react";
 import ControlsPanel from "@/components/ControlsPanel";
 
-/** Renders a floating toggle button. When open=false, we animate collapse,
- * then unmount the panel (freeing event listeners). */
+/**
+ * Floating toggle + animated mount/unmount for the controls.
+ * When closed, we animate opacity/transform/max-height, then unmount so there
+ * are zero event handlers or visual artifacts ("ghosts").
+ */
 export default function ClientControlsWrapper() {
   const [open, setOpen] = useState(true);
   const [renderPanel, setRenderPanel] = useState(true);
-  const ref = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
 
-  // When closing, wait for transition to finish, then unmount.
+  // Close → wait for transition end → unmount
   useEffect(() => {
     if (open) {
       setRenderPanel(true);
       return;
     }
-    const el = ref.current;
+    const el = innerRef.current;
     if (!el) return;
+
     const onEnd = (e: TransitionEvent) => {
       if (e.target === el) setRenderPanel(false);
     };
     el.addEventListener("transitionend", onEnd);
-    // Fallback unmount if transition not fired
-    const t = setTimeout(() => setRenderPanel(false), 400);
+    const t = setTimeout(() => setRenderPanel(false), 350); // fallback
+
     return () => {
       el.removeEventListener("transitionend", onEnd);
       clearTimeout(t);
@@ -32,23 +36,30 @@ export default function ClientControlsWrapper() {
 
   return (
     <>
+      {/* Toggle button (bottom-left) */}
       <button
         onClick={() => setOpen((p) => !p)}
-        style={toggleBtn()}
+        style={toggleBtnStyle}
+        aria-controls="controls-panel"
+        aria-expanded={open}
       >
         {open ? "Hide Controls" : "Show Controls"}
       </button>
 
-      {/* Floating container at bottom-right that we animate ourselves */}
-      <div style={dock()} aria-hidden={!open}>
+      {/* Dock (bottom-right). Stays mounted; inner content animates/unmounts */}
+      <div style={dockStyle} aria-hidden={!open}>
         <div
-          ref={ref}
+          id="controls-panel"
+          ref={innerRef}
           style={{
             transition: "opacity 220ms ease, transform 220ms ease, max-height 220ms ease",
-            maxHeight: open ? 1000 : 0,
+            maxHeight: open ? 1200 : 0,
             opacity: open ? 1 : 0,
             transform: open ? "translateY(0px)" : "translateY(8px)",
             overflow: "hidden",
+            // prevent hit-testing & “ghost” blending during the fade
+            pointerEvents: open ? "auto" : "none",
+            visibility: open ? "visible" : "hidden",
           }}
         >
           {renderPanel && <ControlsPanel floating={false} />}
@@ -58,16 +69,15 @@ export default function ClientControlsWrapper() {
   );
 }
 
-const dock = () => ({
-  position: "fixed" as const,
+const dockStyle: React.CSSProperties = {
+  position: "fixed",
   right: 12,
   bottom: 12,
   zIndex: 20,
-  // Let inner div handle the animation; this container stays put
-});
+};
 
-const toggleBtn = () => ({
-  position: "fixed" as const,
+const toggleBtnStyle: React.CSSProperties = {
+  position: "fixed",
   left: 12,
   bottom: 12,
   zIndex: 30,
@@ -79,4 +89,4 @@ const toggleBtn = () => ({
   fontSize: 13,
   cursor: "pointer",
   backdropFilter: "blur(6px)",
-});
+};
