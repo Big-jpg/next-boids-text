@@ -3,85 +3,101 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export type Regime = "pure" | "assist" | "orbit";
+export type DrawMode = "dot" | "triangle" | "trail";
+export type MouseMode = "attract" | "repel";
+
 export type Cfg = {
+  // Core flocking
   count: number;
   speed: number;
   maxForce: number;
+
+  // Sensing radii
   alignRadius: number;
   cohesionRadius: number;
   separationRadius: number;
+
+  // Force weights
   alignStrength: number;
   cohesionStrength: number;
   separationStrength: number;
+
+  // Targeting aids (still useful for “orbit” regime demos)
   orbitRadius: number;
   repelRadius: number;
 
   // Steering behaviour
-  exactSpeedForming: boolean;
-  pdLockK: number;     // spring constant
-  pdLockDamp: number;  // damping constant
+  exactSpeedForming: boolean; // now just “exact speed discipline” toggle
+  pdLockK: number;            // used by orbit/assist modes
+  pdLockDamp: number;
 
-  // Density & spacing
-  autoDensity: boolean;
-  densityFactor: number;
-  letterSpacingPx: number;
-
-  // NEW — per-mode turn limits (radians per frame)
+  // Per-mode turn limits (radians per frame)
   maxTurnFreeRad: number;
   maxTurnFormRad: number;
+
+  // Regime
+  regime: Regime;
+
+  // Visuals
+  drawMode: DrawMode;
+  boidSize: number;          // px
+  trailLength: number;       // frames for trail mode (<= 40 sensible)
+
+  // Mouse interaction
+  mouseEnabled: boolean;
+  mouseMode: MouseMode;
+  mouseStrength: number;     // 0..1 scalar
+  mouseFalloff: number;      // px influence radius
+
+  // Pulse (density/speed modulation)
+  pulseEnabledDefault: boolean;
 };
 
 export const defaultCfg: Cfg = {
-  count: 688,
-  speed: 3.0,
+  // tuned for a lively, stable flock
+  count: 620,
+  speed: 3.2,
   maxForce: 0.06,
+
   separationRadius: 48,
-  alignRadius: 87,
-  cohesionRadius: 106,
-  alignStrength: 0.8,
-  cohesionStrength: 0.35,
-  separationStrength: 1.2,
-  orbitRadius: 12,
-  repelRadius: 28,
+  alignRadius: 96,
+  cohesionRadius: 110,
+
+  alignStrength: 0.85,
+  cohesionStrength: 0.42,
+  separationStrength: 1.15,
+
+  orbitRadius: 18,
+  repelRadius: 32,
+
   exactSpeedForming: true,
   pdLockK: 0.28,
-  pdLockDamp: 0.48,
+  pdLockDamp: 0.52,
 
+  maxTurnFreeRad: 0.22,  // ~12.6°
+  maxTurnFormRad: 0.35,  // ~20.1°
 
-  autoDensity: true,
-  densityFactor: 0.82,
-  letterSpacingPx: 0,
+  regime: "pure",
 
-  // defaults match what we tested by hand
-  maxTurnFreeRad: 0.22,   // ≈ 12.6°
-  maxTurnFormRad: 0.35,   // ≈ 20.1°
+  drawMode: "triangle",
+  boidSize: 3.0,
+  trailLength: 16,
+
+  mouseEnabled: true,
+  mouseMode: "attract",
+  mouseStrength: 0.8,
+  mouseFalloff: 180,
+
+  pulseEnabledDefault: false,
 };
 
 export function useBoidsControls() {
-  const [text, setText] = useState("B O I D S");
   const [cfg, setCfg] = useState<Cfg>(defaultCfg);
-  const formingRef = useRef(false);
-  const [forming, setForming] = useState(false);
-  const [pulse, setPulse] = useState(false);
+  const [pulse, setPulse] = useState(defaultCfg.pulseEnabledDefault);
 
   const dispatch = (name: string, detail?: any) =>
     window.dispatchEvent(new CustomEvent(name, { detail }));
-
-  const formText = useCallback(() => {
-    formingRef.current = true;
-    setForming(true);
-    dispatch("boids/form", { text, cfg }); // pass full cfg so canvas sees turn caps
-  }, [text, cfg]);
-
-  const disperse = useCallback(() => {
-    formingRef.current = false;
-    setForming(false);
-    dispatch("boids/disperse");
-  }, []);
-
-  useEffect(() => {
-    dispatch("boids/cfg", cfg);
-  }, [cfg]);
 
   const togglePulse = useCallback(() => {
     setPulse((p) => {
@@ -91,10 +107,13 @@ export function useBoidsControls() {
     });
   }, []);
 
+  // push cfg on change
+  useEffect(() => {
+    dispatch("boids/cfg", cfg);
+  }, [cfg]);
+
   return {
-    text, setText,
     cfg, setCfg,
-    forming, formText, disperse,
     pulse, togglePulse,
   };
 }
