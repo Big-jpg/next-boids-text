@@ -10,6 +10,24 @@ import {
 type Props = { floating?: boolean; style?: React.CSSProperties };
 type Tab = "Flocking" | "Steering" | "Rendering" | "Mouse" | "Rays" | "Predator" | "About";
 
+// Small rect type to compose sprite frame sets from a grid
+type Rect = { x: number; y: number; w: number; h: number };
+
+// Helper: build frames from a grid on the atlas (game-dev style)
+function buildGridFrames(opts: {
+  startX: number; startY: number; frameW: number; frameH: number;
+  cols: number; rows: number; strideX?: number; strideY?: number;
+}): Rect[] {
+  const { startX, startY, frameW, frameH, cols, rows, strideX = frameW, strideY = frameH } = opts;
+  const out: Rect[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      out.push({ x: startX + c * strideX, y: startY + r * strideY, w: frameW, h: frameH });
+    }
+  }
+  return out;
+}
+
 export default function ControlsPanel({ floating = true, style }: Props) {
   const { cfg, setCfg, pulse, togglePulse, applyPreset, presetNames } = useBoidsControls();
   const [tab, setTab] = useState<Tab>("Flocking");
@@ -185,30 +203,51 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                   <option value="dot">Dot</option>
                   <option value="triangle">Triangle</option>
                   <option value="trail">Trail</option>
+                  <option value="sprite">Sprite (Atlas)</option>
                 </select>
               </Row>
-              <Row label={`Boid Size (${cfg.boidSize.toFixed(1)} px)`}>
-                <input type="range" min={1} max={8} step={0.1}
-                  value={cfg.boidSize}
-                  onChange={(e) => setCfg({ ...cfg, boidSize: Number(e.target.value) })} />
-              </Row>
-              {cfg.drawMode === "trail" && (
+
+              {/* Vector sizes */}
+              {cfg.drawMode !== "sprite" && (
+                <Row label={`Boid Size (${cfg.boidSize.toFixed(1)} px)`}>
+                  <input type="range" min={1} max={8} step={0.1}
+                    value={cfg.boidSize}
+                    onChange={(e) => setCfg({ ...cfg, boidSize: Number(e.target.value) })} />
+                </Row>
+              )}
+
+              {/* Sprite settings */}
+              {cfg.drawMode === "sprite" && (
                 <>
-                  <Row label={`Trail Length (${cfg.trailLength})`}>
-                    <input type="range" min={4} max={40} step={1}
-                      value={cfg.trailLength}
-                      onChange={(e) => setCfg({ ...cfg, trailLength: Number(e.target.value) })} />
+                  <Row label="Atlas URL">
+                    <input
+                      style={{ ...selectStyle, width: "100%" }}
+                      type="text"
+                      value={cfg.spriteAtlasUrl}
+                      onChange={(e) => setCfg({ ...cfg, spriteAtlasUrl: e.target.value })}
+                      placeholder="https://…/fish_shark_atlas.png"
+                    />
                   </Row>
-                  <Row label={`Trail Sample Every (${cfg.trailSampleEvery} f)`}>
-                    <input type="range" min={1} max={6} step={1}
-                      value={cfg.trailSampleEvery}
-                      onChange={(e) => setCfg({ ...cfg, trailSampleEvery: Number(e.target.value) })} />
+
+                  <Row label={`Sprite Scale (${cfg.spriteScale.toFixed(2)}×)`}>
+                    <input type="range" min={0.4} max={3} step={0.05}
+                      value={cfg.spriteScale}
+                      onChange={(e) => setCfg({ ...cfg, spriteScale: Number(e.target.value) })} />
                   </Row>
-                  <Row label={`Trail Opacity (${cfg.trailOpacity.toFixed(2)})`}>
-                    <input type="range" min={0.1} max={1} step={0.05}
-                      value={cfg.trailOpacity}
-                      onChange={(e) => setCfg({ ...cfg, trailOpacity: Number(e.target.value) })} />
+
+                  <Row label={`Anim FPS (${cfg.spriteAnimFps} fps)`}>
+                    <input type="range" min={0} max={24} step={1}
+                      value={cfg.spriteAnimFps}
+                      onChange={(e) => setCfg({ ...cfg, spriteAnimFps: Number(e.target.value) })} />
                   </Row>
+
+                  {/* Quick grid composer for demo/dev atlases */}
+                  <div style={{ marginTop: 6, padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 10 }}>
+                    <div style={{ marginBottom: 8, opacity: 0.9, fontSize: 12 }}>Grid Composer (build frames from an atlas grid)</div>
+                    <GridComposer
+                      onApply={(fish, shark) => setCfg({ ...cfg, spriteFish: fish, spriteShark: shark })}
+                    />
+                  </div>
                 </>
               )}
             </fieldset>
@@ -235,12 +274,12 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                 </select>
               </Row>
               <Row label={`Strength (${cfg.mouseStrength.toFixed(2)})`}>
-                <input type="range" min={0} max={1} step={0.01}
+                <input type="range" min={0} max={2} step={0.05}
                   value={cfg.mouseStrength}
                   onChange={(e) => setCfg({ ...cfg, mouseStrength: Number(e.target.value) })} />
               </Row>
               <Row label={`Falloff Radius (${cfg.mouseFalloff}px)`}>
-                <input type="range" min={60} max={420} step={5}
+                <input type="range" min={40} max={360} step={5}
                   value={cfg.mouseFalloff}
                   onChange={(e) => setCfg({ ...cfg, mouseFalloff: Number(e.target.value) })} />
               </Row>
@@ -263,28 +302,25 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                 </select>
               </Row>
               <Row label={`Nearest K (${cfg.rayNearestK})`}>
-                <input type="range" min={1} max={6} step={1}
+                <input type="range" min={1} max={12} step={1}
                   value={cfg.rayNearestK}
                   onChange={(e) => setCfg({ ...cfg, rayNearestK: Number(e.target.value) })} />
               </Row>
               <Row label={`Ray Opacity (${cfg.rayOpacity.toFixed(2)})`}>
-                <input type="range" min={0.1} max={1} step={0.05}
+                <input type="range" min={0} max={1} step={0.05}
                   value={cfg.rayOpacity}
                   onChange={(e) => setCfg({ ...cfg, rayOpacity: Number(e.target.value) })} />
               </Row>
               <Row label={`Ray Thickness (${cfg.rayThickness.toFixed(2)} px)`}>
-                <input type="range" min={0.25} max={3} step={0.05}
+                <input type="range" min={0.5} max={4} step={0.1}
                   value={cfg.rayThickness}
                   onChange={(e) => setCfg({ ...cfg, rayThickness: Number(e.target.value) })} />
               </Row>
               <Row label={`Force Length Scale (${cfg.rayLengthScale}px)`}>
-                <input type="range" min={6} max={40} step={1}
+                <input type="range" min={4} max={120} step={1}
                   value={cfg.rayLengthScale}
                   onChange={(e) => setCfg({ ...cfg, rayLengthScale: Number(e.target.value) })} />
               </Row>
-              <p style={{ opacity: 0.7, fontSize: 12, marginTop: 8 }}>
-                Tip: press <b>R</b> to toggle Rays globally.
-              </p>
             </fieldset>
           )}
 
@@ -299,43 +335,43 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                 />
               </Row>
 
-              <Row label="Randomize Predator">
-                <button
-                  style={buttonStyle}
-                  onClick={() => window.dispatchEvent(new CustomEvent("boids/predator/random"))}
-                  title="Pick any boid at random and mark as predator"
-                >
-                  Pick Random
-                </button>
-              </Row>
-
               <Row label="Pick Predator">
                 <button
-                  style={buttonStyle}
-                  onClick={() => setCfg({ ...cfg, predatorPickMode: !cfg.predatorPickMode })}
-                  title="Optional: next Shift-click selects the predator"
+                  style={{ ...buttonStyle, width: "100%" }}
+                  onClick={() => setCfg({ ...cfg, predatorPickMode: true })}
+                  title="Shift-click or use this to select a predator by clicking on the canvas"
                 >
-                  {cfg.predatorPickMode ? "Click on a boid…" : "Enable Picker"}
+                  Click on a boid…
                 </button>
               </Row>
 
-              <Row label={`Range (${Math.round(cfg.predatorRange)} px)`}>
-                <input type="range" min={60} max={420} step={5}
+              <Row label="Pick Random">
+                <button
+                  style={{ ...buttonStyle, width: "100%" }}
+                  onClick={() => window.dispatchEvent(new CustomEvent("boids/predator/random"))}
+                  title="Randomly select a predator"
+                >
+                  Random Predator
+                </button>
+              </Row>
+
+              <Row label={`Range (${cfg.predatorRange} px)`}>
+                <input type="range" min={20} max={220} step={1}
                   value={cfg.predatorRange}
                   onChange={(e) => setCfg({ ...cfg, predatorRange: Number(e.target.value) })} />
               </Row>
               <Row label={`Predator Chase (${cfg.predatorChase.toFixed(2)})`}>
-                <input type="range" min={0.2} max={3} step={0.05}
+                <input type="range" min={0} max={4} step={0.05}
                   value={cfg.predatorChase}
                   onChange={(e) => setCfg({ ...cfg, predatorChase: Number(e.target.value) })} />
               </Row>
               <Row label={`Prey Flee (${cfg.preyFlee.toFixed(2)})`}>
-                <input type="range" min={0.2} max={3} step={0.05}
+                <input type="range" min={0} max={4} step={0.05}
                   value={cfg.preyFlee}
                   onChange={(e) => setCfg({ ...cfg, preyFlee: Number(e.target.value) })} />
               </Row>
               <Row label={`Speed Multiplier (${cfg.predatorSpeedMul.toFixed(2)}×)`}>
-                <input type="range" min={1} max={3} step={0.05}
+                <input type="range" min={0.6} max={3.0} step={0.05}
                   value={cfg.predatorSpeedMul}
                   onChange={(e) => setCfg({ ...cfg, predatorSpeedMul: Number(e.target.value) })} />
               </Row>
@@ -345,30 +381,21 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                   onChange={(e) => setCfg({ ...cfg, predatorSizeScale: Number(e.target.value) })} />
               </Row>
 
-              <div style={{ height: 8 }} />
-
-              <legend style={{ ...legendStyle, opacity: 0.9 }}>Elimination</legend>
-              <Row label="Enable Elimination">
-                <input
-                  type="checkbox"
-                  checked={cfg.enableElimination}
-                  onChange={(e) => setCfg({ ...cfg, enableElimination: e.target.checked })}
-                />
-              </Row>
-              <Row label={`Kill Distance (${Math.round(cfg.killDistance)} px)`}>
-                <input type="range" min={10} max={60} step={1}
+              <div style={{ marginTop: 8, opacity: 0.8, fontSize: 12 }}>Elimination</div>
+              <Row label={`Kill Distance (${cfg.killDistance}px)`}>
+                <input type="range" min={4} max={40} step={1}
                   value={cfg.killDistance}
                   onChange={(e) => setCfg({ ...cfg, killDistance: Number(e.target.value) })} />
               </Row>
-              <Row label={`Kill Cooldown (${cfg.killCooldown.toFixed(2)} s)`}>
-                <input type="range" min={0.1} max={2.0} step={0.05}
-                  value={cfg.killCooldown}
-                  onChange={(e) => setCfg({ ...cfg, killCooldown: Number(e.target.value) })} />
-              </Row>
-              <Row label={`Fade Seconds (${cfg.fadeSeconds.toFixed(2)} s)`}>
-                <input type="range" min={0.2} max={3} step={0.05}
+              <Row label={`Fade Seconds (${cfg.fadeSeconds.toFixed(2)}s)`}>
+                <input type="range" min={0.1} max={3} step={0.05}
                   value={cfg.fadeSeconds}
                   onChange={(e) => setCfg({ ...cfg, fadeSeconds: Number(e.target.value) })} />
+              </Row>
+              <Row label={`Kill Cooldown (${cfg.killCooldown.toFixed(2)}s)`}>
+                <input type="range" min={0.05} max={3} step={0.05}
+                  value={cfg.killCooldown}
+                  onChange={(e) => setCfg({ ...cfg, killCooldown: Number(e.target.value) })} />
               </Row>
               <Row label="Respawn After Fade">
                 <input
@@ -377,25 +404,17 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                   onChange={(e) => setCfg({ ...cfg, respawnAfterFade: e.target.checked })}
                 />
               </Row>
-
-              <p style={{ opacity: 0.7, fontSize: 12, marginTop: 8 }}>
-                Tips: click <b>Pick Random</b> to select a predator instantly. With Elimination on, prey within
-                <b> Kill Distance</b> fades out, respawning after <b>Fade Seconds</b> (if enabled).
-              </p>
             </fieldset>
           )}
 
           {tab === "About" && (
             <fieldset style={fieldsetStyle}>
-              <legend style={legendStyle}>Shortcuts</legend>
-              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6, opacity: 0.85 }}>
-                <li><b>F</b>: toggle mouse field</li>
-                <li><b>R</b>: toggle rays on/off</li>
-                <li><b>H</b>: toggle HUD</li>
-                <li><b>M</b>: collapse/expand controls</li>
-                <li><b>Shift-click</b>: pick predator (if picker is enabled)</li>
-                <li>Click on canvas: burst impulse</li>
-              </ul>
+              <legend style={legendStyle}>About</legend>
+              <div style={{ fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
+                <p><strong>Boids Flocking Bench</strong> — vector &amp; sprite rendering, rays, predator/prey, trails.</p>
+                <p>Hotkeys: <code>F</code> mouse, <code>R</code> rays, <code>M</code> panel, <code>H</code> HUD, <code>Shift+Click</code> to set predator.</p>
+                <p>Sprite mode uses an <em>atlas</em>: set the image URL and build frames with the Grid Composer above.</p>
+              </div>
             </fieldset>
           )}
         </div>
@@ -404,47 +423,150 @@ export default function ControlsPanel({ floating = true, style }: Props) {
   );
 }
 
-/* components */
+/* ——————————————————— Grid Composer (inline, minimal) ——————————————————— */
+function GridComposer({ onApply }: { onApply: (fish: Rect[], shark: Rect[]) => void }) {
+  const [fish, setFish] = useState({ x: 0, y: 0, w: 48, h: 32, cols: 4, rows: 1, sx: 48, sy: 32 });
+  const [shark, setShark] = useState({ x: 0, y: 40, w: 72, h: 40, cols: 4, rows: 1, sx: 72, sy: 40 });
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: "grid", gridTemplateColumns: "220px 1fr", alignItems: "center", gap: 10, margin: "6px 0" }}>
-      <span style={{ opacity: 0.85 }}>{label}</span>
-      {children}
-    </label>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div>
+        <div style={{ marginBottom: 6, opacity: 0.9 }}>Fish Grid</div>
+        <GridInputs v={fish} onChange={setFish} />
+      </div>
+      <div>
+        <div style={{ marginBottom: 6, opacity: 0.9 }}>Shark Grid</div>
+        <GridInputs v={shark} onChange={setShark} />
+      </div>
+      <div style={{ gridColumn: "1 / span 2", display: "flex", gap: 8, marginTop: 8 }}>
+        <button
+          style={buttonStyle}
+          onClick={() => {
+            const fishFrames = buildGridFrames({
+              startX: fish.x, startY: fish.y, frameW: fish.w, frameH: fish.h,
+              cols: fish.cols, rows: fish.rows, strideX: fish.sx, strideY: fish.sy
+            });
+            const sharkFrames = buildGridFrames({
+              startX: shark.x, startY: shark.y, frameW: shark.w, frameH: shark.h,
+              cols: shark.cols, rows: shark.rows, strideX: shark.sx, strideY: shark.sy
+            });
+            onApply(fishFrames, sharkFrames);
+          }}
+        >
+          Apply Frames
+        </button>
+        <div style={{ alignSelf: "center", fontSize: 12, opacity: 0.8 }}>
+          Tip: set columns/rows/strides to match your sprite sheet layout.
+        </div>
+      </div>
+    </div>
   );
 }
 
-/* styles */
+function GridInputs({ v, onChange }: {
+  v: { x: number; y: number; w: number; h: number; cols: number; rows: number; sx: number; sy: number };
+  onChange: (n: any) => void;
+}) {
+  const num = (label: string, key: keyof typeof v, min: number, max: number, step = 1) => (
+    <Row label={label}>
+      <input
+        type="number"
+        value={v[key] as number}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => onChange({ ...v, [key]: Number(e.target.value) })}
+        style={{ ...selectStyle, width: 90, padding: "6px 8px" }}
+      />
+    </Row>
+  );
+  return (
+    <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 10, padding: 8 }}>
+      {num("Start X", "x", 0, 4096)}
+      {num("Start Y", "y", 0, 4096)}
+      {num("Frame W", "w", 1, 2048)}
+      {num("Frame H", "h", 1, 2048)}
+      {num("Cols", "cols", 1, 64)}
+      {num("Rows", "rows", 1, 64)}
+      {num("Stride X", "sx", 1, 4096)}
+      {num("Stride Y", "sy", 1, 4096)}
+    </div>
+  );
+}
+
+/* ——————————————————— UI bits ——————————————————— */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", alignItems: "center", gap: 10, margin: "10px 0" }}>
+      <div style={{ fontSize: 13, opacity: 0.9 }}>{label}</div>
+      <div>{children}</div>
+    </div>
+  );
+}
 
 const floatingWrapStyle: React.CSSProperties = {
-  position: "fixed", right: 12, bottom: 12, zIndex: 10,
-  width: "min(560px, 92vw)", padding: 10, borderRadius: 12,
+  position: "absolute",
+  right: 16,
+  top: 16,
+  zIndex: 10,
+  background: "rgba(10,12,16,0.82)",
   border: "1px solid rgba(255,255,255,0.06)",
-  background: "rgba(20,24,32,0.6)", backdropFilter: "blur(8px)",
-  color: "#cbd5e1", fontSize: 13,
+  boxShadow: "0 8px 30px rgba(0,0,0,0.45)",
+  borderRadius: 16,
+  padding: 12,
+  color: "#DCE6FA",
+  backdropFilter: "blur(10px)",
 };
-const embeddedWrapStyle = { ...floatingWrapStyle, position: "static" as const };
-const buttonStyle: React.CSSProperties = { appearance: "none", border: "1px solid rgba(255,255,255,0.06)", background: "#11151c", color: "#cbd5e1", padding: "8px 10px", borderRadius: 10, cursor: "pointer" };
-const iconButton: React.CSSProperties = { ...buttonStyle, width: 36, padding: "6px 0", textAlign: "center" };
-const fieldsetStyle: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 10, marginBottom: 12 };
-const legendStyle: React.CSSProperties = { padding: "0 6px", opacity: 0.9 };
-const selectStyle: React.CSSProperties = { background: "#11151c", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: "6px 8px" };
 
-const tabbarStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(7, 1fr)",
-  gap: 6,
+const embeddedWrapStyle: React.CSSProperties = { padding: 12 };
+
+const fieldsetStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 12,
+  padding: 12,
+  marginBottom: 12,
 };
+
+const legendStyle: React.CSSProperties = { padding: "0 6px", opacity: 0.9, fontSize: 13 };
+
+const tabbarStyle: React.CSSProperties = { display: "flex", gap: 6, margin: "8px 0 6px" };
+
 const tabButton: React.CSSProperties = {
-  ...buttonStyle,
-  padding: "6px 6px",
-  fontSize: 12,
-  opacity: 0.75,
-  borderRadius: 8,
+  padding: "6px 10px",
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.06)",
+  color: "#dfe7fb",
+  fontSize: 13,
 };
+
 const activeTabButton: React.CSSProperties = {
-  opacity: 1,
-  background: "#171b23",
-  borderColor: "rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.22)",
+};
+
+const selectStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.06)",
+  color: "#e6eeff",
+  border: "1px solid rgba(255,255,255,0.14)",
+  borderRadius: 10,
+  padding: "6px 10px",
+  fontSize: 13,
+};
+
+const buttonStyle: React.CSSProperties = {
+  background: "rgba(120,80,220,0.28)",
+  border: "1px solid rgba(120,80,220,0.45)",
+  color: "#e9e6ff",
+  padding: "6px 10px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontSize: 13,
+};
+
+const iconButton: React.CSSProperties = {
+  ...buttonStyle,
+  width: 34,
+  textAlign: "center",
+  padding: "6px 0",
 };

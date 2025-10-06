@@ -5,9 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 /** Types */
 export type Regime = "pure" | "assist" | "orbit";
-export type DrawMode = "dot" | "triangle" | "trail";
+export type DrawMode = "dot" | "triangle" | "trail" | "sprite";
 export type MouseMode = "attract" | "repel";
 export type RayMode = "off" | "neighbours" | "forces" | "both";
+
+export type Rect = { x: number; y: number; w: number; h: number };
 
 export type Cfg = {
   // Core flocking
@@ -46,6 +48,13 @@ export type Cfg = {
   trailSampleEvery: number; // frames between trail updates
   trailOpacity: number;     // 0..1 stroke alpha
 
+  // Sprite rendering (when drawMode === "sprite")
+  spriteAtlasUrl: string;   // image url
+  spriteScale: number;      // global scale multiplier
+  spriteAnimFps: number;    // 0 = no animation (use frame 0)
+  spriteFish: Rect[];       // frames for prey/normal boids
+  spriteShark: Rect[];      // frames for predator
+
   // Mouse interaction
   mouseEnabled: boolean;
   mouseMode: MouseMode;
@@ -65,7 +74,7 @@ export type Cfg = {
   predatorChase: number;        // force scale
   preyFlee: number;             // force scale
   predatorSpeedMul: number;     // multiplies speed cap
-  predatorSizeScale: number;    // visual
+  predatorSizeScale: number;    // visual/sprite scale multiplier for predator
   predatorPickMode: boolean;    // UI-only toggle to pick on next click
 
   // Elimination (fake death with fade + respawn)
@@ -111,17 +120,27 @@ export const BASE_CFG: Cfg = {
 
   regime: "pure",
 
+  // Rendering
   drawMode: "trail",
   boidSize: 3.0,
   trailLength: 16,
   trailSampleEvery: 2,
   trailOpacity: 0.55,
 
+  // Sprite defaults (safe no-op)
+  spriteAtlasUrl: "",
+  spriteScale: 1.0,
+  spriteAnimFps: 12,
+  spriteFish: [],
+  spriteShark: [],
+
+  // Mouse
   mouseEnabled: true,
   mouseMode: "attract",
   mouseStrength: 0.8,
   mouseFalloff: 180,
 
+  // Rays
   rayMode: "off",
   rayNearestK: 3,
   rayOpacity: 0.35,
@@ -144,6 +163,7 @@ export const BASE_CFG: Cfg = {
   fadeSeconds: 0.85,
   respawnAfterFade: true,
 
+  // Misc
   pulseEnabledDefault: false,
   showHud: false,
 };

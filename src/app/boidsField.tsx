@@ -5,6 +5,8 @@ import { useEffect, useRef } from "react";
 import { Cfg, defaultCfg, type RayMode } from "@/lib/controls";
 
 type Vec = { x: number; y: number };
+type Rect = { x: number; y: number; w: number; h: number };
+
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 const TWO_PI = Math.PI * 2;
 
@@ -21,6 +23,9 @@ class Boid {
   alive = true;
   fadeUntil = 0; // timestamp (secs) when respawn occurs
   fadeStart = 0; // timestamp (secs) when fade started
+
+  // simple sprite animation state (shared cadence; boid stores local phase if needed later)
+  animT = 0;
 
   constructor(p: Vec, v: Vec, trailCap: number) {
     this.p = { ...p };
@@ -57,12 +62,12 @@ class Boid {
       if (other === this || !other.alive) continue;
       const dx = other.p.x - this.p.x, dy = other.p.y - this.p.y;
       const d = Math.hypot(dx, dy);
-      if (d < cfg.alignRadius) { sumA.x += other.v.x; sumA.y += other.v.y; cntA++; }
+      if (d < cfg.alignRadius)    { sumA.x += other.v.x; sumA.y += other.v.y; cntA++; }
       if (d < cfg.cohesionRadius) { sumC.x += other.p.x; sumC.y += other.p.y; cntC++; }
       if (d < cfg.separationRadius && d > 0.0001) { sumS.x -= dx / d; sumS.y -= dy / d; cntS++; }
     }
 
-    if (cntA) { sumA.x /= cntA; sumA.y /= cntA; this.addForce({ x: sumA.x * cfg.alignStrength, y: sumA.y * cfg.alignStrength }); }
+    if (cntA) { sumA.x /= cntA; sumA.y /= cntA; this.addForce({ x: sumA.x * cfg.alignStrength,    y: sumA.y * cfg.alignStrength }); }
     if (cntC) { sumC.x = sumC.x / cntC - this.p.x; sumC.y = sumC.y / cntC - this.p.y; this.addForce({ x: sumC.x * cfg.cohesionStrength, y: sumC.y * cfg.cohesionStrength }); }
     if (cntS) { sumS.x /= cntS; sumS.y /= cntS; this.addForce({ x: sumS.x * cfg.separationStrength, y: sumS.y * cfg.separationStrength }); }
   }
@@ -71,7 +76,7 @@ class Boid {
     if (!this.alive) return;
     const k = cfg.pdLockK, d = cfg.pdLockDamp;
     const spring = { x: (target.x - this.p.x) * k, y: (target.y - this.p.y) * k };
-    const damp = { x: -this.v.x * d, y: -this.v.y * d };
+    const damp   = { x: -this.v.x * d, y: -this.v.y * d };
     this.addForce({ x: spring.x + damp.x, y: spring.y + damp.y });
   }
 
@@ -89,11 +94,7 @@ class Boid {
   }
 
   integrate(cfg: Cfg, disciplined: boolean, frame: number, sampleEvery: number, speedMul = 1) {
-    // if fading, we keep it stationary and just render its alpha
-    if (!this.alive) {
-      this.a.x = this.a.y = 0;
-      return;
-    }
+    if (!this.alive) { this.a.x = this.a.y = 0; return; }
 
     this.limitForce(cfg.maxForce * speedMul);
     this.v.x += this.a.x; this.v.y += this.a.y;
@@ -149,6 +150,11 @@ export default function BoidsField() {
   const timeRef = useRef(0); // seconds
   const lastTsRef = useRef<number | null>(null);
   const killReadyAtRef = useRef(0); // seconds
+
+  // ——— Sprite atlas handling
+  const atlasRef = useRef<HTMLImageElement | null>(null);
+  const atlasUrlRef = useRef<string>(defaultCfg.spriteAtlasUrl);
+  const atlasReadyRef = useRef<boolean>(false);
 
   const mouse = useRef({ x: 0, y: 0, inside: false });
 
@@ -228,21 +234,67 @@ export default function BoidsField() {
     }
   }
 
-  function drawBoid(ctx: CanvasRenderingContext2D, b: Boid, cfg: Cfg, alpha = 1) {
-    const size = (b.isPredator ? cfg.boidSize * cfg.predatorSizeScale : cfg.boidSize);
-    const color = b.isPredator ? `rgba(255,160,150,${0.95 * alpha})` : `rgba(220,230,250,${0.92 * alpha})`;
+  // ——— Sprite drawing (atlas)
+  function drawSprite(
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    frame: Rect,
+    x: number,
+    y: number,
+    angle: number,
+    scale: number,
+    alpha: number
+  ) {
+    const hw = (frame.w * scale) / 2;
+    const hh = (frame.h * scale) / 2;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, -hw, -hh, frame.w * scale, frame.h * scale);
+    ctx.restore();
+  }
 
+  function drawBoid(ctx: CanvasRenderingContext2D, b: Boid, cfg: Cfg, alpha = 1) {
+    // Trail pass (works with any draw mode)
     if (cfg.drawMode === "trail" && !b.isPredator) {
       drawTrail(ctx, b, cfg, alpha);
     }
+
+    // Sprite mode (fish/shark atlas)
+    if (cfg.drawMode === "sprite" && atlasReadyRef.current && atlasRef.current) {
+      const img = atlasRef.current!;
+      const ang = Math.atan2(b.v.y, b.v.x);
+      const frames = b.isPredator ? cfg.spriteShark : cfg.spriteFish;
+      // simple animation tick (global time base for coherence)
+      const t = timeRef.current * (cfg.spriteAnimFps || 0);
+      const idx = frames.length > 1 ? Math.floor(t) % frames.length : 0;
+      const frame = frames[Math.max(0, Math.min(frames.length - 1, idx))];
+      const scale = (b.isPredator ? cfg.predatorSizeScale : 1) * cfg.spriteScale;
+
+      drawSprite(ctx, img, frame, b.p.x, b.p.y, ang, scale, alpha);
+
+      // predator ring (kept — helps readability)
+      if (b.isPredator) {
+        const ringR = (Math.max(frame.w, frame.h) * cfg.spriteScale * cfg.predatorSizeScale) * 0.75;
+        ctx.strokeStyle = `rgba(255,160,150,${0.35 * alpha})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(b.p.x, b.p.y, ringR, 0, TWO_PI); ctx.stroke();
+      }
+      return;
+    }
+
+    // Vector modes
+    const size = (b.isPredator ? cfg.boidSize * cfg.predatorSizeScale : cfg.boidSize);
+    const color = b.isPredator ? `rgba(255,160,150,${0.95 * alpha})` : `rgba(220,230,250,${0.92 * alpha})`;
 
     if (cfg.drawMode === "dot" || (cfg.drawMode === "trail" && !b.isPredator)) {
       ctx.fillStyle = color;
       ctx.beginPath(); ctx.arc(b.p.x, b.p.y, size * 0.6, 0, TWO_PI); ctx.fill();
     } else {
       const ang = Math.atan2(b.v.y, b.v.x), s = size;
-      const tip = { x: b.p.x + Math.cos(ang) * (2.0 * s), y: b.p.y + Math.sin(ang) * (2.0 * s) };
-      const left = { x: b.p.x + Math.cos(ang + 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang + 2.5) * (1.2 * s) };
+      const tip =   { x: b.p.x + Math.cos(ang) * (2.0 * s), y: b.p.y + Math.sin(ang) * (2.0 * s) };
+      const left =  { x: b.p.x + Math.cos(ang + 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang + 2.5) * (1.2 * s) };
       const right = { x: b.p.x + Math.cos(ang - 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang - 2.5) * (1.2 * s) };
       ctx.fillStyle = color;
       ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(left.x, left.y); ctx.lineTo(right.x, right.y); ctx.closePath(); ctx.fill();
@@ -265,7 +317,6 @@ export default function BoidsField() {
         .map(nb => ({ nb, d2: (nb.p.x - b.p.x) ** 2 + (nb.p.y - b.p.y) ** 2 }))
         .sort((a, z) => a.d2 - z.d2)
         .slice(0, cfg.rayNearestK);
-
       ctx.strokeStyle = `rgba(160,200,255,${cfg.rayOpacity * alpha})`;
       for (const { nb } of neigh) { ctx.beginPath(); ctx.moveTo(b.p.x, b.p.y); ctx.lineTo(nb.p.x, nb.p.y); ctx.stroke(); }
     }
@@ -279,8 +330,8 @@ export default function BoidsField() {
         const dx = o.p.x - b.p.x, dy = o.p.y - b.p.y;
         const d = Math.hypot(dx, dy);
         if (d < cfg.separationRadius && d > 0.0001) { sep.x -= dx / d; sep.y -= dy / d; cSep++; }
-        if (d < cfg.cohesionRadius) { coh.x += o.p.x; coh.y += o.p.y; cCoh++; }
-        if (d < cfg.alignRadius) { ali.x += o.v.x; ali.y += o.v.y; cAli++; }
+        if (d < cfg.cohesionRadius)                 { coh.x += o.p.x;  coh.y += o.p.y;  cCoh++; }
+        if (d < cfg.alignRadius)                    { ali.x += o.v.x;  ali.y += o.v.y;  cAli++; }
       }
       if (cCoh) { coh.x = coh.x / cCoh - b.p.x; coh.y = coh.y / cCoh - b.p.y; }
 
@@ -305,7 +356,7 @@ export default function BoidsField() {
     // time / dt
     if (lastTsRef.current == null) lastTsRef.current = ts ?? performance.now();
     const now = ts ?? performance.now();
-    const dt = Math.min(0.05, (now - lastTsRef.current) / 1000); // clamp 50ms
+    const dt = Math.min(0.05, (now - lastTsRef.current) / 1000);
     lastTsRef.current = now;
     timeRef.current += dt;
 
@@ -316,6 +367,15 @@ export default function BoidsField() {
       pulsePhaseRef.current += 0.02;
       const bias = 0.02 * Math.sin(pulsePhaseRef.current);
       cfg.speed = clamp(defaultCfg.speed * (1 + bias), 1.0, 6.0);
+    }
+
+    // keep atlas in sync with cfg changes
+    if (atlasUrlRef.current !== cfg.spriteAtlasUrl) {
+      atlasUrlRef.current = cfg.spriteAtlasUrl;
+      atlasReadyRef.current = false;
+      if (!atlasRef.current) atlasRef.current = new Image();
+      atlasRef.current.onload = () => { atlasReadyRef.current = true; };
+      atlasRef.current.src = atlasUrlRef.current || "";
     }
 
     ensurePopulation();
@@ -433,6 +493,11 @@ export default function BoidsField() {
     spawn(defaultCfg.count);
     requestAnimationFrame(loop);
 
+    // prime atlas once
+    if (!atlasRef.current) atlasRef.current = new Image();
+    atlasRef.current.onload = () => { atlasReadyRef.current = true; };
+    atlasRef.current.src = atlasUrlRef.current || "";
+
     // listeners
     const onResize = () => resize();
 
@@ -448,17 +513,12 @@ export default function BoidsField() {
       // if predator is enabled but none is set, pick random automatically
       if (cfgRef.current.enablePredator && !predatorRef.current && boidsRef.current.length) {
         const idx = (Math.random() * boidsRef.current.length) | 0;
-        const picked = boidsRef.current[idx];        // Boid | undefined
-
+        const picked = boidsRef.current[idx];
         if (picked) {
-          const prev = predatorRef.current as Boid | null;
-          if (prev) prev.isPredator = false;         // safe: prev is Boid here
-
-          picked.isPredator = true;
-          picked.alive = true;
+          if (predatorRef.current) predatorRef.current.isPredator = false;
+          picked.isPredator = true; picked.alive = true;
           predatorRef.current = picked;
         }
-
       }
     };
 
