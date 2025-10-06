@@ -59,6 +59,22 @@ export type Cfg = {
   rayThickness: number;     // px
   rayLengthScale: number;   // scale for force arrows
 
+  // Predator
+  enablePredator: boolean;
+  predatorRange: number;        // px
+  predatorChase: number;        // force scale
+  preyFlee: number;             // force scale
+  predatorSpeedMul: number;     // multiplies speed cap
+  predatorSizeScale: number;    // visual
+  predatorPickMode: boolean;    // UI-only toggle to pick on next click
+
+  // Elimination (fake death with fade + respawn)
+  enableElimination: boolean;
+  killDistance: number;         // px
+  killCooldown: number;         // seconds
+  fadeSeconds: number;          // seconds
+  respawnAfterFade: boolean;
+
   // Pulse
   pulseEnabledDefault: boolean;
 
@@ -69,7 +85,7 @@ export type Cfg = {
 /** Helpers */
 const deg2rad = (d: number) => (d * Math.PI) / 180;
 
-/** Base (neutral) config — sensible simulation defaults */
+/** Base config */
 export const BASE_CFG: Cfg = {
   count: 620,
   speed: 3.2,
@@ -112,13 +128,29 @@ export const BASE_CFG: Cfg = {
   rayThickness: 0.75,
   rayLengthScale: 18,
 
+  // Predator defaults
+  enablePredator: false,
+  predatorRange: 180,
+  predatorChase: 1.2,
+  preyFlee: 1.4,
+  predatorSpeedMul: 1.6,
+  predatorSizeScale: 1.8,
+  predatorPickMode: false,
+
+  // Elimination defaults
+  enableElimination: true,
+  killDistance: 26,
+  killCooldown: 0.40,
+  fadeSeconds: 0.85,
+  respawnAfterFade: true,
+
   pulseEnabledDefault: false,
   showHud: false,
 };
 
 /** Presets */
 export type PresetName =
-  | "Gravity Wells"      // your magnetic attractor
+  | "Gravity Wells"
   | "Schooling"
   | "Orbit Playground"
   | "Trail Nebula"
@@ -126,93 +158,53 @@ export type PresetName =
 
 type PresetMap = Record<PresetName, Partial<Cfg>>;
 
-// NOTE: Only put overrides that differ from BASE_CFG
 export const PRESETS: PresetMap = {
   "Gravity Wells": {
-    // from your screenshots
     count: 125,
     speed: 3.2,
     separationRadius: 15,
     alignRadius: 96,
     cohesionRadius: 158,
-
     alignStrength: 0.40,
     cohesionStrength: 1.40,
     separationStrength: 1.15,
-
     exactSpeedForming: true,
     pdLockK: 0.28,
     pdLockDamp: 0.52,
-
     maxTurnFreeRad: deg2rad(13),
     maxTurnFormRad: deg2rad(20),
-
     regime: "pure",
-
     drawMode: "triangle",
     boidSize: 6.0,
-
     mouseEnabled: true,
     mouseMode: "attract",
     mouseStrength: 0.80,
     mouseFalloff: 180,
-
     rayMode: "neighbours",
     rayNearestK: 5,
     rayOpacity: 0.40,
     rayThickness: 0.90,
     rayLengthScale: 7,
   },
-
   Schooling: {
-    count: 900,
-    speed: 2.8,
-    separationRadius: 24,
-    alignRadius: 110,
-    cohesionRadius: 140,
-    alignStrength: 1.1,
-    cohesionStrength: 0.5,
-    separationStrength: 0.9,
-    drawMode: "triangle",
-    boidSize: 4.2,
-    rayMode: "off",
+    count: 900, speed: 2.8,
+    separationRadius: 24, alignRadius: 110, cohesionRadius: 140,
+    alignStrength: 1.1, cohesionStrength: 0.5, separationStrength: 0.9,
+    drawMode: "triangle", boidSize: 4.2, rayMode: "off",
   },
-
   "Orbit Playground": {
-    regime: "orbit",
-    mouseEnabled: true,
-    mouseMode: "attract",
-    orbitRadius: 22,
-    repelRadius: 40,
-    pdLockK: 0.35,
-    pdLockDamp: 0.6,
-    drawMode: "dot",
-    boidSize: 3.0,
-    rayMode: "neighbours",
-    rayNearestK: 3,
-    rayOpacity: 0.28,
-    rayThickness: 0.7,
+    regime: "orbit", mouseEnabled: true, mouseMode: "attract",
+    orbitRadius: 22, repelRadius: 40, pdLockK: 0.35, pdLockDamp: 0.6,
+    drawMode: "dot", boidSize: 3.0,
+    rayMode: "neighbours", rayNearestK: 3, rayOpacity: 0.28, rayThickness: 0.7,
   },
-
   "Trail Nebula": {
-    count: 1200,
-    speed: 2.6,
-    drawMode: "trail",
-    boidSize: 2.8,
-    trailLength: 28,
-    trailSampleEvery: 3,
-    trailOpacity: 0.42,
-    rayMode: "off",
+    count: 1200, speed: 2.6, drawMode: "trail", boidSize: 2.8,
+    trailLength: 28, trailSampleEvery: 3, trailOpacity: 0.42, rayMode: "off",
   },
-
   "Debug Rays": {
-    rayMode: "both",
-    rayNearestK: 4,
-    rayOpacity: 0.55,
-    rayThickness: 1.0,
-    rayLengthScale: 18,
-    drawMode: "triangle",
-    boidSize: 5.2,
+    rayMode: "both", rayNearestK: 4, rayOpacity: 0.55, rayThickness: 1.0, rayLengthScale: 18,
+    drawMode: "triangle", boidSize: 5.2,
   },
 };
 
@@ -222,10 +214,10 @@ export function cfgFromPreset(name: PresetName): Cfg {
   return { ...BASE_CFG, ...patch };
 }
 
-/** Choose the startup preset here (yours) */
+/** Startup preset */
 const STARTUP_PRESET: PresetName = "Gravity Wells";
 
-/** The exported default config drives initial UI + simulation */
+/** Exported config for initial state */
 export const defaultCfg: Cfg = cfgFromPreset(STARTUP_PRESET);
 
 /** Hook */
@@ -255,7 +247,6 @@ export function useBoidsControls() {
     dispatch("boids/cfg", cfg);
   }, [cfg]);
 
-  // for the panel to render the list only once
   const presetNames = useMemo<PresetName[]>(
     () => ["Gravity Wells", "Schooling", "Orbit Playground", "Trail Nebula", "Debug Rays"],
     []

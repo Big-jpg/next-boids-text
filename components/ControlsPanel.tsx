@@ -8,7 +8,7 @@ import {
 } from "@/lib/controls";
 
 type Props = { floating?: boolean; style?: React.CSSProperties };
-type Tab = "Flocking" | "Steering" | "Rendering" | "Mouse" | "Rays" | "About";
+type Tab = "Flocking" | "Steering" | "Rendering" | "Mouse" | "Rays" | "Predator" | "About";
 
 export default function ControlsPanel({ floating = true, style }: Props) {
   const { cfg, setCfg, pulse, togglePulse, applyPreset, presetNames } = useBoidsControls();
@@ -20,12 +20,12 @@ export default function ControlsPanel({ floating = true, style }: Props) {
   const deg2rad = (d: number) => (d * Math.PI) / 180;
 
   const tabs: Tab[] = useMemo(
-    () => ["Flocking", "Steering", "Rendering", "Mouse", "Rays", "About"],
+    () => ["Flocking", "Steering", "Rendering", "Mouse", "Rays", "Predator", "About"],
     []
   );
 
   return (
-    <div style={{ ...outerStyle, ...style, width: collapsed ? 64 : "min(520px, 92vw)" }}>
+    <div style={{ ...outerStyle, ...style, width: collapsed ? 64 : "min(560px, 92vw)" }}>
       {/* Header */}
       <div style={{ display: "grid", gridTemplateColumns: collapsed ? "1fr" : "auto auto auto 1fr auto", gap: 8, alignItems: "center", marginBottom: 10 }}>
         <button onClick={() => setCollapsed(!collapsed)} style={iconButton} title="Collapse / Expand">
@@ -41,10 +41,8 @@ export default function ControlsPanel({ floating = true, style }: Props) {
               Reset
             </button>
 
-            {/* Spacer */}
             <div />
 
-            {/* Regime */}
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <label style={{ fontSize: 12, opacity: 0.85 }}>Regime</label>
               <select
@@ -61,7 +59,7 @@ export default function ControlsPanel({ floating = true, style }: Props) {
         )}
       </div>
 
-      {/* Presets row */}
+      {/* Presets */}
       {!collapsed && (
         <div style={{ ...fieldsetStyle, display: "grid", gridTemplateColumns: "100px 1fr", alignItems: "center", gap: 10, marginBottom: 12 }}>
           <div style={{ opacity: 0.9 }}>Preset</div>
@@ -85,10 +83,7 @@ export default function ControlsPanel({ floating = true, style }: Props) {
             <button
               key={t}
               onClick={() => setTab(t)}
-              style={{
-                ...tabButton,
-                ...(tab === t ? activeTabButton : {}),
-              }}
+              style={{ ...tabButton, ...(tab === t ? activeTabButton : {}) }}
             >
               {t}
             </button>
@@ -293,6 +288,103 @@ export default function ControlsPanel({ floating = true, style }: Props) {
             </fieldset>
           )}
 
+          {tab === "Predator" && (
+            <fieldset style={fieldsetStyle}>
+              <legend style={legendStyle}>Predator</legend>
+              <Row label="Enable Predator">
+                <input
+                  type="checkbox"
+                  checked={cfg.enablePredator}
+                  onChange={(e) => setCfg({ ...cfg, enablePredator: e.target.checked })}
+                />
+              </Row>
+
+              <Row label="Randomize Predator">
+                <button
+                  style={buttonStyle}
+                  onClick={() => window.dispatchEvent(new CustomEvent("boids/predator/random"))}
+                  title="Pick any boid at random and mark as predator"
+                >
+                  Pick Random
+                </button>
+              </Row>
+
+              <Row label="Pick Predator">
+                <button
+                  style={buttonStyle}
+                  onClick={() => setCfg({ ...cfg, predatorPickMode: !cfg.predatorPickMode })}
+                  title="Optional: next Shift-click selects the predator"
+                >
+                  {cfg.predatorPickMode ? "Click on a boid…" : "Enable Picker"}
+                </button>
+              </Row>
+
+              <Row label={`Range (${Math.round(cfg.predatorRange)} px)`}>
+                <input type="range" min={60} max={420} step={5}
+                  value={cfg.predatorRange}
+                  onChange={(e) => setCfg({ ...cfg, predatorRange: Number(e.target.value) })} />
+              </Row>
+              <Row label={`Predator Chase (${cfg.predatorChase.toFixed(2)})`}>
+                <input type="range" min={0.2} max={3} step={0.05}
+                  value={cfg.predatorChase}
+                  onChange={(e) => setCfg({ ...cfg, predatorChase: Number(e.target.value) })} />
+              </Row>
+              <Row label={`Prey Flee (${cfg.preyFlee.toFixed(2)})`}>
+                <input type="range" min={0.2} max={3} step={0.05}
+                  value={cfg.preyFlee}
+                  onChange={(e) => setCfg({ ...cfg, preyFlee: Number(e.target.value) })} />
+              </Row>
+              <Row label={`Speed Multiplier (${cfg.predatorSpeedMul.toFixed(2)}×)`}>
+                <input type="range" min={1} max={3} step={0.05}
+                  value={cfg.predatorSpeedMul}
+                  onChange={(e) => setCfg({ ...cfg, predatorSpeedMul: Number(e.target.value) })} />
+              </Row>
+              <Row label={`Size Scale (${cfg.predatorSizeScale.toFixed(2)}×)`}>
+                <input type="range" min={1} max={3} step={0.05}
+                  value={cfg.predatorSizeScale}
+                  onChange={(e) => setCfg({ ...cfg, predatorSizeScale: Number(e.target.value) })} />
+              </Row>
+
+              <div style={{ height: 8 }} />
+
+              <legend style={{ ...legendStyle, opacity: 0.9 }}>Elimination</legend>
+              <Row label="Enable Elimination">
+                <input
+                  type="checkbox"
+                  checked={cfg.enableElimination}
+                  onChange={(e) => setCfg({ ...cfg, enableElimination: e.target.checked })}
+                />
+              </Row>
+              <Row label={`Kill Distance (${Math.round(cfg.killDistance)} px)`}>
+                <input type="range" min={10} max={60} step={1}
+                  value={cfg.killDistance}
+                  onChange={(e) => setCfg({ ...cfg, killDistance: Number(e.target.value) })} />
+              </Row>
+              <Row label={`Kill Cooldown (${cfg.killCooldown.toFixed(2)} s)`}>
+                <input type="range" min={0.1} max={2.0} step={0.05}
+                  value={cfg.killCooldown}
+                  onChange={(e) => setCfg({ ...cfg, killCooldown: Number(e.target.value) })} />
+              </Row>
+              <Row label={`Fade Seconds (${cfg.fadeSeconds.toFixed(2)} s)`}>
+                <input type="range" min={0.2} max={3} step={0.05}
+                  value={cfg.fadeSeconds}
+                  onChange={(e) => setCfg({ ...cfg, fadeSeconds: Number(e.target.value) })} />
+              </Row>
+              <Row label="Respawn After Fade">
+                <input
+                  type="checkbox"
+                  checked={cfg.respawnAfterFade}
+                  onChange={(e) => setCfg({ ...cfg, respawnAfterFade: e.target.checked })}
+                />
+              </Row>
+
+              <p style={{ opacity: 0.7, fontSize: 12, marginTop: 8 }}>
+                Tips: click <b>Pick Random</b> to select a predator instantly. With Elimination on, prey within
+                <b> Kill Distance</b> fades out, respawning after <b>Fade Seconds</b> (if enabled).
+              </p>
+            </fieldset>
+          )}
+
           {tab === "About" && (
             <fieldset style={fieldsetStyle}>
               <legend style={legendStyle}>Shortcuts</legend>
@@ -301,6 +393,7 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                 <li><b>R</b>: toggle rays on/off</li>
                 <li><b>H</b>: toggle HUD</li>
                 <li><b>M</b>: collapse/expand controls</li>
+                <li><b>Shift-click</b>: pick predator (if picker is enabled)</li>
                 <li>Click on canvas: burst impulse</li>
               </ul>
             </fieldset>
@@ -315,7 +408,7 @@ export default function ControlsPanel({ floating = true, style }: Props) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: "grid", gridTemplateColumns: "180px 1fr", alignItems: "center", gap: 10, margin: "6px 0" }}>
+    <label style={{ display: "grid", gridTemplateColumns: "220px 1fr", alignItems: "center", gap: 10, margin: "6px 0" }}>
       <span style={{ opacity: 0.85 }}>{label}</span>
       {children}
     </label>
@@ -326,7 +419,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const floatingWrapStyle: React.CSSProperties = {
   position: "fixed", right: 12, bottom: 12, zIndex: 10,
-  width: "min(520px, 92vw)", padding: 10, borderRadius: 12,
+  width: "min(560px, 92vw)", padding: 10, borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.06)",
   background: "rgba(20,24,32,0.6)", backdropFilter: "blur(8px)",
   color: "#cbd5e1", fontSize: 13,
@@ -340,7 +433,7 @@ const selectStyle: React.CSSProperties = { background: "#11151c", color: "#cbd5e
 
 const tabbarStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(6, 1fr)",
+  gridTemplateColumns: "repeat(7, 1fr)",
   gap: 6,
 };
 const tabButton: React.CSSProperties = {
