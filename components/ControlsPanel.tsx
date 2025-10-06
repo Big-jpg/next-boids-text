@@ -4,14 +4,14 @@
 import React, { useMemo, useState } from "react";
 import {
   Cfg, Regime, DrawMode, MouseMode, RayMode,
-  defaultCfg, useBoidsControls
+  defaultCfg, useBoidsControls, type PresetName
 } from "@/lib/controls";
 
 type Props = { floating?: boolean; style?: React.CSSProperties };
 type Tab = "Flocking" | "Steering" | "Rendering" | "Mouse" | "Rays" | "About";
 
 export default function ControlsPanel({ floating = true, style }: Props) {
-  const { cfg, setCfg, pulse, togglePulse } = useBoidsControls();
+  const { cfg, setCfg, pulse, togglePulse, applyPreset, presetNames } = useBoidsControls();
   const [tab, setTab] = useState<Tab>("Flocking");
   const [collapsed, setCollapsed] = useState(false);
   const outerStyle = floating ? floatingWrapStyle : embeddedWrapStyle;
@@ -25,12 +25,13 @@ export default function ControlsPanel({ floating = true, style }: Props) {
   );
 
   return (
-    <div style={{ ...outerStyle, ...style, width: collapsed ? 64 : "min(480px, 92vw)" }}>
+    <div style={{ ...outerStyle, ...style, width: collapsed ? 64 : "min(520px, 92vw)" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: collapsed ? "1fr" : "auto auto auto 1fr auto", gap: 8, alignItems: "center", marginBottom: 10 }}>
         <button onClick={() => setCollapsed(!collapsed)} style={iconButton} title="Collapse / Expand">
           {collapsed ? "⤢" : "⤡"}
         </button>
+
         {!collapsed && (
           <>
             <button onClick={togglePulse} style={buttonStyle}>
@@ -39,8 +40,13 @@ export default function ControlsPanel({ floating = true, style }: Props) {
             <button onClick={() => setCfg(defaultCfg)} style={{ ...buttonStyle, opacity: 0.85 }}>
               Reset
             </button>
-            <div style={{ marginLeft: "auto" }}>
-              <label style={{ fontSize: 12, opacity: 0.85, marginRight: 8 }}>Regime</label>
+
+            {/* Spacer */}
+            <div />
+
+            {/* Regime */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label style={{ fontSize: 12, opacity: 0.85 }}>Regime</label>
               <select
                 value={cfg.regime}
                 onChange={(e) => setCfg({ ...cfg, regime: e.target.value as Regime })}
@@ -54,6 +60,23 @@ export default function ControlsPanel({ floating = true, style }: Props) {
           </>
         )}
       </div>
+
+      {/* Presets row */}
+      {!collapsed && (
+        <div style={{ ...fieldsetStyle, display: "grid", gridTemplateColumns: "100px 1fr", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <div style={{ opacity: 0.9 }}>Preset</div>
+          <select
+            onChange={(e) => applyPreset(e.target.value as PresetName)}
+            style={{ ...selectStyle, width: "100%" }}
+            defaultValue={"Gravity Wells"}
+            title="Load a named preset"
+          >
+            {presetNames.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Tabs */}
       {!collapsed && (
@@ -100,7 +123,7 @@ export default function ControlsPanel({ floating = true, style }: Props) {
                   onChange={(e) => setCfg({ ...cfg, alignRadius: Number(e.target.value) })} />
               </Row>
               <Row label={`Coh (${cfg.cohesionRadius})`}>
-                <input type="range" min={30} max={200} step={1}
+                <input type="range" min={30} max={220} step={1}
                   value={cfg.cohesionRadius}
                   onChange={(e) => setCfg({ ...cfg, cohesionRadius: Number(e.target.value) })} />
               </Row>
@@ -276,6 +299,7 @@ export default function ControlsPanel({ floating = true, style }: Props) {
               <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6, opacity: 0.85 }}>
                 <li><b>F</b>: toggle mouse field</li>
                 <li><b>R</b>: toggle rays on/off</li>
+                <li><b>H</b>: toggle HUD</li>
                 <li><b>M</b>: collapse/expand controls</li>
                 <li>Click on canvas: burst impulse</li>
               </ul>
@@ -302,7 +326,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const floatingWrapStyle: React.CSSProperties = {
   position: "fixed", right: 12, bottom: 12, zIndex: 10,
-  width: "min(480px, 92vw)", padding: 10, borderRadius: 12,
+  width: "min(520px, 92vw)", padding: 10, borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.06)",
   background: "rgba(20,24,32,0.6)", backdropFilter: "blur(8px)",
   color: "#cbd5e1", fontSize: 13,
