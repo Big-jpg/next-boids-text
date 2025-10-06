@@ -1,11 +1,12 @@
 // lib/controls.ts
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type Regime = "pure" | "assist" | "orbit";
 export type DrawMode = "dot" | "triangle" | "trail";
 export type MouseMode = "attract" | "repel";
+export type RayMode = "off" | "neighbours" | "forces" | "both";
 
 export type Cfg = {
   // Core flocking
@@ -23,39 +24,45 @@ export type Cfg = {
   cohesionStrength: number;
   separationStrength: number;
 
-  // Targeting aids (still useful for “orbit” regime demos)
+  // Targeting/assist
   orbitRadius: number;
   repelRadius: number;
-
-  // Steering behaviour
-  exactSpeedForming: boolean; // now just “exact speed discipline” toggle
-  pdLockK: number;            // used by orbit/assist modes
+  exactSpeedForming: boolean;
+  pdLockK: number;
   pdLockDamp: number;
 
-  // Per-mode turn limits (radians per frame)
+  // Turn limits
   maxTurnFreeRad: number;
   maxTurnFormRad: number;
 
   // Regime
   regime: Regime;
 
-  // Visuals
+  // Rendering
   drawMode: DrawMode;
-  boidSize: number;          // px
-  trailLength: number;       // frames for trail mode (<= 40 sensible)
+  boidSize: number;
+  trailLength: number;
+  trailSampleEvery: number; // frames between trail updates
+  trailOpacity: number;     // 0..1 stroke alpha
 
   // Mouse interaction
   mouseEnabled: boolean;
   mouseMode: MouseMode;
-  mouseStrength: number;     // 0..1 scalar
-  mouseFalloff: number;      // px influence radius
+  mouseStrength: number;    // 0..1
+  mouseFalloff: number;     // px
 
-  // Pulse (density/speed modulation)
+  // Raycasting viz
+  rayMode: RayMode;
+  rayNearestK: number;      // K nearest neighbours to draw
+  rayOpacity: number;       // 0..1
+  rayThickness: number;     // px
+  rayLengthScale: number;   // scale for force arrows
+
+  // Pulse
   pulseEnabledDefault: boolean;
 };
 
 export const defaultCfg: Cfg = {
-  // tuned for a lively, stable flock
   count: 620,
   speed: 3.2,
   maxForce: 0.06,
@@ -75,19 +82,27 @@ export const defaultCfg: Cfg = {
   pdLockK: 0.28,
   pdLockDamp: 0.52,
 
-  maxTurnFreeRad: 0.22,  // ~12.6°
-  maxTurnFormRad: 0.35,  // ~20.1°
+  maxTurnFreeRad: 0.22,
+  maxTurnFormRad: 0.35,
 
   regime: "pure",
 
-  drawMode: "triangle",
+  drawMode: "trail",
   boidSize: 3.0,
   trailLength: 16,
+  trailSampleEvery: 2,  // ← slows trail “gridline” update rate
+  trailOpacity: 0.55,   // ← gentler contrast
 
   mouseEnabled: true,
   mouseMode: "attract",
   mouseStrength: 0.8,
   mouseFalloff: 180,
+
+  rayMode: "neighbours",
+  rayNearestK: 3,
+  rayOpacity: 0.35,
+  rayThickness: 0.75,
+  rayLengthScale: 18,
 
   pulseEnabledDefault: false,
 };
@@ -107,13 +122,9 @@ export function useBoidsControls() {
     });
   }, []);
 
-  // push cfg on change
   useEffect(() => {
     dispatch("boids/cfg", cfg);
   }, [cfg]);
 
-  return {
-    cfg, setCfg,
-    pulse, togglePulse,
-  };
+  return { cfg, setCfg, pulse, togglePulse };
 }

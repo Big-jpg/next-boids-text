@@ -2,7 +2,10 @@
 "use client";
 
 import React from "react";
-import { Cfg, Regime, DrawMode, MouseMode, defaultCfg, useBoidsControls } from "@/lib/controls";
+import {
+  Cfg, Regime, DrawMode, MouseMode, RayMode,
+  defaultCfg, useBoidsControls
+} from "@/lib/controls";
 
 type Props = { floating?: boolean; style?: React.CSSProperties };
 
@@ -37,8 +40,8 @@ export default function ControlsPanel({ floating = true, style }: Props) {
             style={selectStyle}
           >
             <option value="pure">Pure Boids</option>
-            <option value="assist">Assist (tighter turn/PD)</option>
-            <option value="orbit">Orbit &amp; Arrive</option>
+            <option value="assist">Assist (heading stabilizer)</option>
+            <option value="orbit">Orbit &amp; Arrive (mouse)</option>
           </select>
         </Row>
       </fieldset>
@@ -107,37 +110,27 @@ export default function ControlsPanel({ floating = true, style }: Props) {
         </Row>
 
         <Row label={`PD Spring (k = ${cfg.pdLockK.toFixed(2)})`}>
-          <input
-            type="range"
-            min={0.05} max={1.2} step={0.01}
+          <input type="range" min={0.05} max={1.2} step={0.01}
             value={cfg.pdLockK}
-            onChange={(e) => setCfg({ ...cfg, pdLockK: Number(e.target.value) })}
-          />
+            onChange={(e) => setCfg({ ...cfg, pdLockK: Number(e.target.value) })} />
         </Row>
 
         <Row label={`PD Damping (d = ${cfg.pdLockDamp.toFixed(2)})`}>
-          <input
-            type="range"
-            min={0.05} max={1.2} step={0.01}
+          <input type="range" min={0.05} max={1.2} step={0.01}
             value={cfg.pdLockDamp}
-            onChange={(e) => setCfg({ ...cfg, pdLockDamp: Number(e.target.value) })}
-          />
+            onChange={(e) => setCfg({ ...cfg, pdLockDamp: Number(e.target.value) })} />
         </Row>
 
         <Row label={`Max Turn (Free) ${Math.round(rad2deg(cfg.maxTurnFreeRad))}°`}>
-          <input
-            type="range" min={5} max={45} step={1}
+          <input type="range" min={5} max={45} step={1}
             value={Math.round(rad2deg(cfg.maxTurnFreeRad))}
-            onChange={(e) => setCfg({ ...cfg, maxTurnFreeRad: deg2rad(Number(e.target.value)) })}
-          />
+            onChange={(e) => setCfg({ ...cfg, maxTurnFreeRad: deg2rad(Number(e.target.value)) })} />
         </Row>
 
         <Row label={`Max Turn (Assist/Orbit) ${Math.round(rad2deg(cfg.maxTurnFormRad))}°`}>
-          <input
-            type="range" min={5} max={45} step={1}
+          <input type="range" min={5} max={45} step={1}
             value={Math.round(rad2deg(cfg.maxTurnFormRad))}
-            onChange={(e) => setCfg({ ...cfg, maxTurnFormRad: deg2rad(Number(e.target.value)) })}
-          />
+            onChange={(e) => setCfg({ ...cfg, maxTurnFormRad: deg2rad(Number(e.target.value)) })} />
         </Row>
       </fieldset>
 
@@ -163,11 +156,23 @@ export default function ControlsPanel({ floating = true, style }: Props) {
         </Row>
 
         {cfg.drawMode === "trail" && (
-          <Row label={`Trail Length (${cfg.trailLength})`}>
-            <input type="range" min={4} max={40} step={1}
-              value={cfg.trailLength}
-              onChange={(e) => setCfg({ ...cfg, trailLength: Number(e.target.value) })} />
-          </Row>
+          <>
+            <Row label={`Trail Length (${cfg.trailLength})`}>
+              <input type="range" min={4} max={40} step={1}
+                value={cfg.trailLength}
+                onChange={(e) => setCfg({ ...cfg, trailLength: Number(e.target.value) })} />
+            </Row>
+            <Row label={`Trail Sample Every (${cfg.trailSampleEvery} f)`}>
+              <input type="range" min={1} max={6} step={1}
+                value={cfg.trailSampleEvery}
+                onChange={(e) => setCfg({ ...cfg, trailSampleEvery: Number(e.target.value) })} />
+            </Row>
+            <Row label={`Trail Opacity (${cfg.trailOpacity.toFixed(2)})`}>
+              <input type="range" min={0.1} max={1} step={0.05}
+                value={cfg.trailOpacity}
+                onChange={(e) => setCfg({ ...cfg, trailOpacity: Number(e.target.value) })} />
+            </Row>
+          </>
         )}
       </fieldset>
 
@@ -205,6 +210,47 @@ export default function ControlsPanel({ floating = true, style }: Props) {
             onChange={(e) => setCfg({ ...cfg, mouseFalloff: Number(e.target.value) })} />
         </Row>
       </fieldset>
+
+      <fieldset style={fieldsetStyle}>
+        <legend style={legendStyle}>Raycasting</legend>
+
+        <Row label="Mode">
+          <select
+            value={cfg.rayMode}
+            onChange={(e) => setCfg({ ...cfg, rayMode: e.target.value as RayMode })}
+            style={selectStyle}
+          >
+            <option value="off">Off</option>
+            <option value="neighbours">Neighbours</option>
+            <option value="forces">Forces</option>
+            <option value="both">Both</option>
+          </select>
+        </Row>
+
+        <Row label={`Nearest K (${cfg.rayNearestK})`}>
+          <input type="range" min={1} max={6} step={1}
+            value={cfg.rayNearestK}
+            onChange={(e) => setCfg({ ...cfg, rayNearestK: Number(e.target.value) })} />
+        </Row>
+
+        <Row label={`Ray Opacity (${cfg.rayOpacity.toFixed(2)})`}>
+          <input type="range" min={0.1} max={1} step={0.05}
+            value={cfg.rayOpacity}
+            onChange={(e) => setCfg({ ...cfg, rayOpacity: Number(e.target.value) })} />
+        </Row>
+
+        <Row label={`Ray Thickness (${cfg.rayThickness.toFixed(2)} px)`}>
+          <input type="range" min={0.25} max={3} step={0.05}
+            value={cfg.rayThickness}
+            onChange={(e) => setCfg({ ...cfg, rayThickness: Number(e.target.value) })} />
+        </Row>
+
+        <Row label={`Force Length Scale (${cfg.rayLengthScale}px)`}>
+          <input type="range" min={6} max={40} step={1}
+            value={cfg.rayLengthScale}
+            onChange={(e) => setCfg({ ...cfg, rayLengthScale: Number(e.target.value) })} />
+        </Row>
+      </fieldset>
     </div>
   );
 }
@@ -221,7 +267,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const floatingWrapStyle: React.CSSProperties = {
   position: "fixed", right: 12, bottom: 12, zIndex: 10,
-  width: "min(480px, 92vw)", padding: 12, borderRadius: 12,
+  width: "min(500px, 92vw)", padding: 12, borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.06)",
   background: "rgba(20,24,32,0.6)", backdropFilter: "blur(8px)",
   color: "#cbd5e1", fontSize: 13,
