@@ -1,369 +1,460 @@
-// app/boidsField.tsx
+// src/app/boidsField.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
-import anime from "animejs";
-import { sampleTextToPoints } from "@/lib/textField";
-import { defaultCfg, Cfg } from "@/lib/controls";
+import { Cfg, defaultCfg, type RayMode } from "@/lib/controls";
 
 type Vec = { x: number; y: number };
-type Mode = "free" | "forming";
-
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 const TWO_PI = Math.PI * 2;
 
-export default function BoidsField() {
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const DPRRef = useRef<number>(1);
-  const sizeRef = useRef({ w: 0, h: 0 });
+class Boid {
+  p: Vec;
+  v: Vec;
+  a: Vec = { x: 0, y: 0 };
+  trail?: Vec[];
 
-  const cfgRef = useRef<Cfg>(defaultCfg);
-
-  const hueRef = useRef({ hue: 200 });
-  const attractorRef = useRef({ x: 0, y: 0, strength: 0.18 });
-  const mouseRef = useRef({ x: 0, y: 0 });
-  const followAttractorRef = useRef(true);
-  const modeRef = useRef<Mode>("free");
-  const textTargetsRef = useRef<Vec[]>([]);
-  const mappingRef = useRef<number[]>([]);
-  const pulseRef = useRef(false);
-
-  class Boid {
-    pos: Vec; vel: Vec; acc: Vec;
-    constructor(x: number, y: number) {
-      const ang = Math.random() * TWO_PI;
-      this.pos = { x, y };
-      this.vel = { x: Math.cos(ang) * cfgRef.current.speed, y: Math.sin(ang) * cfgRef.current.speed };
-      this.acc = { x: 0, y: 0 };
-    }
-    applyForce(f: Vec) { this.acc.x += f.x; this.acc.y += f.y; }
-    steerTowards(target: Vec, strength = 1) {
-      const v = { x: target.x - this.pos.x, y: target.y - this.pos.y };
-      const desired = scale(normalize(v), cfgRef.current.speed);
-      let steer = { x: desired.x - this.vel.x, y: desired.y - this.vel.y };
-      this.applyForce(limit(steer, cfgRef.current.maxForce * strength));
-    }
-    flockWeighted(neighbors: Boid[], wAlign: number, wCoh: number, wSep: number) {
-      const cfg = cfgRef.current;
-      let align = { x: 0, y: 0 }, cohesion = { x: 0, y: 0 }, separation = { x: 0, y: 0 };
-      let aC = 0, cC = 0, sC = 0;
-      for (let other of neighbors) if (other !== this) {
-        const dx = other.pos.x - this.pos.x, dy = other.pos.y - this.pos.y;
-        const d = Math.hypot(dx, dy);
-        if (d < cfg.alignRadius) { align.x += other.vel.x; align.y += other.vel.y; aC++; }
-        if (d < cfg.cohesionRadius) { cohesion.x += other.pos.x; cohesion.y += other.pos.y; cC++; }
-        if (d < cfg.separationRadius && d > 0) { separation.x -= dx / d; separation.y -= dy / d; sC++; }
-      }
-      if (aC && wAlign) {
-        align.x /= aC; align.y /= aC;
-        this.applyForce(limit({ x: align.x - this.vel.x, y: align.y - this.vel.y }, cfg.maxForce * cfg.alignStrength * wAlign));
-      }
-      if (cC && wCoh) {
-        cohesion.x /= cC; cohesion.y /= cC;
-        const desired = scale(normalize({ x: cohesion.x - this.pos.x, y: cohesion.y - this.pos.y }), cfg.speed);
-        this.applyForce(limit({ x: desired.x - this.vel.x, y: desired.y - this.vel.y }, cfg.maxForce * cfg.cohesionStrength * wCoh));
-      }
-      if (sC && wSep) {
-        separation.x /= sC; separation.y /= sC;
-        this.applyForce(limit({ x: separation.x - this.vel.x, y: separation.y - this.vel.y }, cfg.maxForce * cfg.separationStrength * wSep));
-      }
-    }
-    borders(w: number, h: number) {
-      const m = 12 + cfgRef.current.speed * 4;
-      if (this.pos.x < -m) this.pos.x = w + m;
-      if (this.pos.y < -m) this.pos.y = h + m;
-      if (this.pos.x > w + m) this.pos.x = -m;
-      if (this.pos.y > h + m) this.pos.y = -m;
-    }
-    update() {
-      const cfg = cfgRef.current;
-      this.vel.x += this.acc.x; this.vel.y += this.acc.y;
-      this.vel = limit(this.vel, cfg.speed);
-      this.pos.x += this.vel.x; this.pos.y += this.vel.y;
-      this.acc.x = 0; this.acc.y = 0;
-    }
-    draw(ctx: CanvasRenderingContext2D, hue: number) {
-      const s = 2.6;
-      const ang = Math.atan2(this.vel.y, this.vel.x);
-      ctx.save();
-      ctx.translate(this.pos.x, this.pos.y);
-      ctx.rotate(ang);
-      ctx.beginPath();
-      ctx.moveTo(s * 2.4, 0);
-      ctx.lineTo(-s * 1.2, s);
-      ctx.lineTo(-s * 1.2, -s);
-      ctx.closePath();
-      ctx.fillStyle = `hsl(${hue}, 75%, 65%)`;
-      ctx.fill();
-      ctx.restore();
+  constructor(p: Vec, v: Vec, trailCap: number) {
+    this.p = { ...p };
+    this.v = { ...v };
+    if (trailCap > 0) {
+      this.trail = new Array(trailCap).fill(0).map(() => ({ x: p.x, y: p.y }));
     }
   }
 
-  const boidsRef = useRef<Boid[]>([]);
+  addForce(f: Vec) {
+    this.a.x += f.x;
+    this.a.y += f.y;
+  }
 
-  /* helpers */
-  function limit(v: Vec, max: number): Vec { const m = Math.hypot(v.x, v.y); return m > max && m > 0 ? { x: v.x / m * max, y: v.y / m * max } : v; }
-  function normalize(v: Vec): Vec { const m = Math.hypot(v.x, v.y) || 1; return { x: v.x / m, y: v.y / m }; }
-  function scale(v: Vec, s: number): Vec { return { x: v.x * s, y: v.y * s }; }
+  limitForce(max: number) {
+    const m = Math.hypot(this.a.x, this.a.y);
+    if (m > max && m > 0) {
+      this.a.x = (this.a.x / m) * max;
+      this.a.y = (this.a.y / m) * max;
+    }
+  }
+
+  steerHeading(desired: Vec, cfg: Cfg, assist: boolean) {
+    const m = Math.hypot(desired.x, desired.y) || 1;
+    const ds = { x: (desired.x / m) * cfg.speed, y: (desired.y / m) * cfg.speed };
+    const vAng = Math.atan2(this.v.y, this.v.x);
+    const dsAng = Math.atan2(ds.y, ds.x);
+    let dAng = ((dsAng - vAng + Math.PI) % TWO_PI) - Math.PI;
+    const cap = assist ? cfg.maxTurnFormRad : cfg.maxTurnFreeRad;
+    const turn = clamp(dAng, -cap, cap);
+    const vMag = Math.hypot(this.v.x, this.v.y) || cfg.speed;
+    const newV = { x: Math.cos(vAng + turn) * vMag, y: Math.sin(vAng + turn) * vMag };
+    return { x: newV.x - this.v.x, y: newV.y - this.v.y };
+  }
+
+  flock(neighbors: Boid[], cfg: Cfg) {
+    let sumA = { x: 0, y: 0 }, cntA = 0;
+    let sumC = { x: 0, y: 0 }, cntC = 0;
+    let sumS = { x: 0, y: 0 }, cntS = 0;
+
+    for (const other of neighbors) {
+      if (other === this) continue;
+      const dx = other.p.x - this.p.x, dy = other.p.y - this.p.y;
+      const d = Math.hypot(dx, dy);
+      if (d < cfg.alignRadius)    { sumA.x += other.v.x; sumA.y += other.v.y; cntA++; }
+      if (d < cfg.cohesionRadius) { sumC.x += other.p.x; sumC.y += other.p.y; cntC++; }
+      if (d < cfg.separationRadius && d > 0.0001) { sumS.x -= dx / d; sumS.y -= dy / d; cntS++; }
+    }
+
+    if (cntA) { sumA.x /= cntA; sumA.y /= cntA; this.addForce({ x: sumA.x * cfg.alignStrength,    y: sumA.y * cfg.alignStrength }); }
+    if (cntC) { sumC.x = sumC.x / cntC - this.p.x; sumC.y = sumC.y / cntC - this.p.y; this.addForce({ x: sumC.x * cfg.cohesionStrength, y: sumC.y * cfg.cohesionStrength }); }
+    if (cntS) { sumS.x /= cntS; sumS.y /= cntS; this.addForce({ x: sumS.x * cfg.separationStrength, y: sumS.y * cfg.separationStrength }); }
+  }
+
+  pdAssist(target: Vec, cfg: Cfg) {
+    const k = cfg.pdLockK, d = cfg.pdLockDamp;
+    const spring = { x: (target.x - this.p.x) * k, y: (target.y - this.p.y) * k };
+    const damp   = { x: -this.v.x * d, y: -this.v.y * d };
+    this.addForce({ x: spring.x + damp.x, y: spring.y + damp.y });
+  }
+
+  orbitField(target: Vec, cfg: Cfg) {
+    const dx = target.x - this.p.x, dy = target.y - this.p.y;
+    const dist = Math.hypot(dx, dy) || 1; const dir = { x: dx / dist, y: dy / dist };
+    if (dist < cfg.repelRadius) { this.addForce({ x: -dir.x * (cfg.repelRadius - dist), y: -dir.y * (cfg.repelRadius - dist) }); return; }
+    if (dist > cfg.orbitRadius * 1.2) {
+      const t = { x: -dir.y, y: dir.x };
+      this.addForce({ x: t.x * cfg.speed * 0.8, y: t.y * cfg.speed * 0.8 });
+    } else {
+      this.pdAssist(target, cfg);
+    }
+  }
+
+  integrate(cfg: Cfg, disciplined: boolean, frame: number, sampleEvery: number) {
+    this.limitForce(cfg.maxForce);
+    this.v.x += this.a.x; this.v.y += this.a.y;
+
+    const vmag = Math.hypot(this.v.x, this.v.y) || 1;
+    if (disciplined && cfg.exactSpeedForming) {
+      const f = cfg.speed / vmag; this.v.x *= f; this.v.y *= f;
+    } else {
+      const vmax = cfg.speed * 1.5;
+      if (vmag > vmax) { this.v.x = (this.v.x / vmag) * vmax; this.v.y = (this.v.y / vmag) * vmax; }
+    }
+
+    // Trail sampling with jump guard — if we wrapped or jumped far, reset trail
+    if (this.trail && frame % sampleEvery === 0) {
+      const last = this.trail[0];
+      const dx = this.p.x - last.x, dy = this.p.y - last.y;
+      const jump = Math.hypot(dx, dy);
+      const jumpThresh = 0.4 * Math.min((window as any).__boidsW || 9999, (window as any).__boidsH || 9999);
+      if (jump > jumpThresh) {
+        this.trail.fill({ x: this.p.x, y: this.p.y });
+      } else {
+        this.trail.pop();
+        this.trail.unshift({ x: this.p.x, y: this.p.y });
+      }
+    }
+
+    this.p.x += this.v.x; this.p.y += this.v.y;
+    this.a.x = 0; this.a.y = 0;
+  }
+
+  // return whether we wrapped this frame
+  borders(w: number, h: number): boolean {
+    let wrapped = false;
+    if (this.p.x < -8) { this.p.x = w + 8; wrapped = true; }
+    if (this.p.y < -8) { this.p.y = h + 8; wrapped = true; }
+    if (this.p.x > w + 8) { this.p.x = -8; wrapped = true; }
+    if (this.p.y > h + 8) { this.p.y = -8; wrapped = true; }
+    return wrapped;
+  }
+}
+
+export default function BoidsField() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const wRef = useRef(0);
+  const hRef = useRef(0);
+
+  const cfgRef = useRef<Cfg>(defaultCfg);
+  const boidsRef = useRef<Boid[]>([]);
+  const pulseRef = useRef(false);
+  const pulsePhaseRef = useRef(0);
+  const frameRef = useRef(0);
+
+  // mouse field
+  const mouse = useRef({ x: 0, y: 0, inside: false });
+
+  function neighborsOf(b: Boid, all: Boid[], radius: number): Boid[] {
+    const r2 = radius * radius;
+    const out: Boid[] = [];
+    for (let i = 0; i < all.length; i++) {
+      const o = all[i];
+      if (o === b) continue;
+      const dx = o.p.x - b.p.x, dy = o.p.y - b.p.y;
+      if (dx * dx + dy * dy <= r2) out.push(o);
+    }
+    return out;
+  }
+
+  function resize() {
+    const c = canvasRef.current!;
+    const DPR = window.devicePixelRatio || 1;
+    const rect = c.getBoundingClientRect();
+    wRef.current = Math.max(320, Math.floor(rect.width));
+    hRef.current = Math.max(240, Math.floor(rect.height));
+    c.width = Math.floor(wRef.current * DPR);
+    c.height = Math.floor(hRef.current * DPR);
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctxRef.current = ctx;
+  }
+
+  function spawn(count: number) {
+    const w = wRef.current, h = hRef.current;
+    const trailCap = cfgRef.current.drawMode === "trail" ? cfgRef.current.trailLength : 0;
+    const arr: Boid[] = [];
+    for (let i = 0; i < count; i++) {
+      const p = { x: Math.random() * w, y: Math.random() * h };
+      const a = Math.random() * TWO_PI;
+      const v = { x: Math.cos(a) * cfgRef.current.speed, y: Math.sin(a) * cfgRef.current.speed };
+      arr.push(new Boid(p, v, trailCap));
+    }
+    boidsRef.current = arr;
+  }
+
+  function ensurePopulation() {
+    const need = cfgRef.current.count, cur = boidsRef.current.length;
+    if (cur === need) return;
+    const w = wRef.current, h = hRef.current;
+    const trailCap = cfgRef.current.drawMode === "trail" ? cfgRef.current.trailLength : 0;
+
+    if (cur < need) {
+      for (let i = 0; i < need - cur; i++) {
+        const p = { x: Math.random() * w, y: Math.random() * h };
+        const a = Math.random() * TWO_PI;
+        const v = { x: Math.cos(a) * cfgRef.current.speed, y: Math.sin(a) * cfgRef.current.speed };
+        boidsRef.current.push(new Boid(p, v, trailCap));
+      }
+    } else {
+      boidsRef.current.splice(need);
+    }
+  }
+
+  function applyMouseField(b: Boid, cfg: Cfg) {
+    if (!cfg.mouseEnabled || !mouse.current.inside || cfg.mouseStrength <= 0) return;
+    const dx = mouse.current.x - b.p.x, dy = mouse.current.y - b.p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > cfg.mouseFalloff) return;
+    const fall = 1 - d / cfg.mouseFalloff;
+    const s = cfg.mouseStrength * fall;
+    const dir = { x: dx / d, y: dy / d };
+    if (cfg.mouseMode === "attract") b.addForce({ x: dir.x * s, y: dir.y * s });
+    else b.addForce({ x: -dir.x * s, y: -dir.y * s });
+  }
+
+  function drawTrail(ctx: CanvasRenderingContext2D, b: Boid, cfg: Cfg) {
+    if (!b.trail || b.trail.length < 2) return;
+    ctx.lineWidth = 1;
+    for (let i = b.trail.length - 1; i >= 1; i--) {
+      const p1 = b.trail[i - 1], p2 = b.trail[i];
+      // skip drawing if segment is a big jump (edge wrap)
+      const jumpThresh = 0.35 * Math.min((window as any).__boidsW || 9999, (window as any).__boidsH || 9999);
+      if (Math.hypot(p2.x - p1.x, p2.y - p1.y) > jumpThresh) continue;
+      const alpha = cfg.trailOpacity * (i / b.trail.length);
+      ctx.strokeStyle = `rgba(220,230,250,${alpha})`;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    }
+  }
+
+  function drawBoid(ctx: CanvasRenderingContext2D, b: Boid, cfg: Cfg) {
+    if (cfg.drawMode === "trail") {
+      drawTrail(ctx, b, cfg);
+      ctx.fillStyle = "rgba(220,230,250,0.92)";
+      ctx.beginPath(); ctx.arc(b.p.x, b.p.y, cfg.boidSize * 0.75, 0, TWO_PI); ctx.fill();
+      return;
+    }
+
+    if (cfg.drawMode === "dot") {
+      ctx.fillStyle = "rgba(220,230,250,0.92)";
+      ctx.beginPath(); ctx.arc(b.p.x, b.p.y, cfg.boidSize * 0.6, 0, TWO_PI); ctx.fill();
+      return;
+    }
+
+    // triangle
+    const ang = Math.atan2(b.v.y, b.v.x), s = cfg.boidSize;
+    const tip =   { x: b.p.x + Math.cos(ang) * (2.0 * s), y: b.p.y + Math.sin(ang) * (2.0 * s) };
+    const left =  { x: b.p.x + Math.cos(ang + 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang + 2.5) * (1.2 * s) };
+    const right = { x: b.p.x + Math.cos(ang - 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang - 2.5) * (1.2 * s) };
+    ctx.fillStyle = "rgba(220,230,250,0.92)";
+    ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(left.x, left.y); ctx.lineTo(right.x, right.y); ctx.closePath(); ctx.fill();
+  }
+
+  function drawRays(ctx: CanvasRenderingContext2D, b: Boid, all: Boid[], cfg: Cfg) {
+    if (cfg.rayMode === "off") return;
+    ctx.lineWidth = cfg.rayThickness;
+
+    if (cfg.rayMode === "neighbours" || cfg.rayMode === "both") {
+      const r = Math.max(cfg.alignRadius, cfg.cohesionRadius);
+      const neigh = neighborsOf(b, all, r)
+        .map(nb => ({ nb, d2: (nb.p.x - b.p.x) ** 2 + (nb.p.y - b.p.y) ** 2 }))
+        .sort((a, z) => a.d2 - z.d2)
+        .slice(0, cfg.rayNearestK);
+
+      ctx.strokeStyle = `rgba(160,200,255,${cfg.rayOpacity})`;
+      for (const { nb } of neigh) {
+        ctx.beginPath(); ctx.moveTo(b.p.x, b.p.y); ctx.lineTo(nb.p.x, nb.p.y); ctx.stroke();
+      }
+    }
+
+    if (cfg.rayMode === "forces" || cfg.rayMode === "both") {
+      const neigh = neighborsOf(b, all, Math.max(cfg.cohesionRadius, cfg.alignRadius));
+      let sep = { x: 0, y: 0 }, coh = { x: 0, y: 0 }, ali = { x: 0, y: 0 };
+      let cSep = 0, cCoh = 0, cAli = 0;
+
+      for (const o of neigh) {
+        const dx = o.p.x - b.p.x, dy = o.p.y - b.p.y;
+        const d = Math.hypot(dx, dy);
+        if (d < cfg.separationRadius && d > 0.0001) { sep.x -= dx / d; sep.y -= dy / d; cSep++; }
+        if (d < cfg.cohesionRadius)                 { coh.x += o.p.x;  coh.y += o.p.y;  cCoh++; }
+        if (d < cfg.alignRadius)                    { ali.x += o.v.x;  ali.y += o.v.y;  cAli++; }
+      }
+      if (cCoh) { coh.x = coh.x / cCoh - b.p.x; coh.y = coh.y / cCoh - b.p.y; }
+
+      const drawVec = (v: Vec, color: string, scale: number) => {
+        const len = Math.hypot(v.x, v.y);
+        if (len < 1e-3) return;
+        const s = (cfg.rayLengthScale * scale) / len;
+        const to = { x: b.p.x + v.x * s, y: b.p.y + v.y * s };
+        ctx.strokeStyle = color;
+        ctx.beginPath(); ctx.moveTo(b.p.x, b.p.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+      };
+
+      const alpha = cfg.rayOpacity;
+      drawVec(sep, `rgba(255,120,120,${alpha})`, cfg.separationStrength);
+      drawVec(coh, `rgba(120,255,140,${alpha})`, cfg.cohesionStrength);
+      drawVec(ali, `rgba(120,180,255,${alpha})`, cfg.alignStrength);
+    }
+  }
+
+  function loop() {
+    const ctx = ctxRef.current!;
+    const w = wRef.current, h = hRef.current;
+    (window as any).__boidsW = w; (window as any).__boidsH = h;
+
+    const cfg = cfgRef.current;
+    const boids = boidsRef.current;
+    frameRef.current++;
+
+    if (pulseRef.current) {
+      pulsePhaseRef.current += 0.02;
+      const bias = 0.02 * Math.sin(pulsePhaseRef.current);
+      cfg.speed = clamp(defaultCfg.speed * (1 + bias), 1.0, 6.0);
+    }
+
+    ensurePopulation();
+
+    ctx.clearRect(0, 0, w, h);
+
+    for (let i = 0; i < boids.length; i++) {
+      const b = boids[i];
+
+      b.flock(neighborsOf(b, boids, Math.max(cfg.cohesionRadius, cfg.alignRadius)), cfg);
+      applyMouseField(b, cfg);
+
+      if (cfg.regime === "assist") {
+        const forward = { x: b.p.x + b.v.x * 0.6, y: b.p.y + b.v.y * 0.6 };
+        b.pdAssist(forward, cfg);
+        b.addForce(b.steerHeading(b.v, cfg, true));
+      } else if (cfg.regime === "orbit" && mouse.current.inside) {
+        b.orbitField({ x: mouse.current.x, y: mouse.current.y }, cfg);
+      }
+
+      b.integrate(cfg, cfg.regime !== "pure", frameRef.current, Math.max(1, cfg.trailSampleEvery));
+      const wrapped = b.borders(w, h);
+      if (wrapped && b.trail) {
+        // break trail on wrap to avoid straight edge-to-edge lines
+        b.trail.fill({ x: b.p.x, y: b.p.y });
+      }
+    }
+
+    // Draw pass
+    for (let i = 0; i < boids.length; i++) drawBoid(ctx, boids[i], cfg);
+
+    // Optional rays (default off → no “grid lines”)
+    if (cfg.rayMode !== "off") {
+      for (let i = 0; i < boids.length; i++) drawRays(ctx, boids[i], boids, cfg);
+    }
+
+    // HUD (toggleable; default OFF)
+    if (cfg.showHud) {
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = "rgba(220,230,250,0.7)";
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter";
+      ctx.textBaseline = "top";
+      ctx.fillText("Boids — Flocking Bench", 12, 12);
+      ctx.fillText("F: mouse • R: rays • M: panel • H: HUD • Click: burst", 12, 28);
+      ctx.globalAlpha = 1;
+    }
+
+    requestAnimationFrame(loop);
+  }
 
   useEffect(() => {
-    const c = document.createElement("canvas");
-    c.id = "c";
-    document.body.appendChild(c);
-    const ctx = c.getContext("2d", { alpha: false })!;
-    ctxRef.current = ctx;
+    // ensure single canvas (prevents doubled HUD/ghost canvas)
+    const host = document.getElementById("boids-canvas-host");
+    const existing = document.getElementById("boids-canvas") as HTMLCanvasElement | null;
+    if (existing && host?.contains(existing)) host.removeChild(existing);
 
-    // --- spawn ring reseed on large resizes (for drama) ---
-    function reseedAroundCenter() {
-      const { w, h } = sizeRef.current;
-      const cx = w * 0.5, cy = h * 0.5;
-      const radius = Math.min(w, h) * 0.35;
-      for (const b of boidsRef.current) {
-        const ang = Math.random() * TWO_PI;
-        const r = radius * (0.85 + Math.random() * 0.15);
-        b.pos.x = cx + Math.cos(ang) * r;
-        b.pos.y = cy + Math.sin(ang) * r;
-        const tAngle = ang + Math.PI / 2;
-        b.vel.x = Math.cos(tAngle) * cfgRef.current.speed;
-        b.vel.y = Math.sin(tAngle) * cfgRef.current.speed;
-        b.acc.x = 0; b.acc.y = 0;
-      }
-    }
+    const canvas = document.createElement("canvas");
+    canvas.id = "boids-canvas";
+    canvasRef.current = canvas;
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.display = "block";
+    host?.appendChild(canvas);
 
-    function seed() {
-      const { w, h } = sizeRef.current;
-      const N = cfgRef.current.count;
-      const b: Boid[] = [];
-      for (let i = 0; i < N; i++) b.push(new Boid(Math.random() * w, Math.random() * h));
-      boidsRef.current = b;
-    }
+    resize();
+    spawn(defaultCfg.count);
+    requestAnimationFrame(loop);
 
-    const doResize = () => {
-      const prev = sizeRef.current;
-      const DPR = clamp(window.devicePixelRatio || 1, 1, 2);
-      DPRRef.current = DPR;
-      const w = window.innerWidth, h = window.innerHeight;
-      const sizeDelta = Math.abs(w - prev.w) + Math.abs(h - prev.h);
+    // listeners
+    const onResize = () => resize();
 
-      sizeRef.current = { w, h };
-      c.width = Math.floor(w * DPR);
-      c.height = Math.floor(h * DPR);
-      c.style.width = w + "px";
-      c.style.height = h + "px";
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-
-      if (!boidsRef.current.length) seed();
-      else if (sizeDelta > 120) reseedAroundCenter();
-    };
-
-    doResize();
-    let resizeTimer: number | null = null;
-    const onResize = () => {
-      if (resizeTimer) window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(doResize, 120);
-    };
-    window.addEventListener("resize", onResize);
-
-    const onMove = (e: MouseEvent) => { mouseRef.current.x = e.clientX; mouseRef.current.y = e.clientY; };
-    const onKey = (e: KeyboardEvent) => { if (e.key.toLowerCase() === "f") followAttractorRef.current = !followAttractorRef.current; };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("keydown", onKey);
-
-    anime({
-      targets: hueRef.current,
-      hue: [{ value: 20, duration: 4000 }, { value: 280, duration: 4000 }],
-      easing: "easeInOutQuad", loop: true, direction: "alternate"
-    });
-
-    const wander = () => {
-      const { w, h } = sizeRef.current;
-      anime({
-        targets: attractorRef.current,
-        x: Math.random() * w, y: Math.random() * h,
-        easing: "easeInOutSine", duration: 3500
-      });
-    };
-    attractorRef.current.x = sizeRef.current.w * 0.5;
-    attractorRef.current.y = sizeRef.current.h * 0.5;
-    const wanderId = setInterval(wander, 3600);
-
-    /* live cfg update & count adjustment */
     const onCfg = (e: Event) => {
-      const detail = (e as CustomEvent).detail as Partial<Cfg>;
-      const before = cfgRef.current;
-      cfgRef.current = { ...cfgRef.current, ...detail };
-
-      // adjust boid count smoothly
-      const target = cfgRef.current.count;
-      const diff = target - boidsRef.current.length;
-      const { w, h } = sizeRef.current;
-      if (diff > 0) for (let i = 0; i < diff; i++) boidsRef.current.push(new Boid(Math.random() * w, Math.random() * h));
-      else if (diff < 0) boidsRef.current.length = Math.max(0, boidsRef.current.length + diff);
-
-      if ((detail.separationRadius ?? before.separationRadius) > before.separationRadius + 10) {
-        for (const b of boidsRef.current) { b.vel.x *= 0.9; b.vel.y *= 0.9; }
-      }
+      const next = (e as CustomEvent).detail as Cfg;
+      const prevDraw = cfgRef.current.drawMode;
+      cfgRef.current = { ...cfgRef.current, ...next };
+      if (prevDraw !== cfgRef.current.drawMode) spawn(cfgRef.current.count);
     };
 
-    /* density pulse (unchanged) */
     const onPulse = (e: Event) => {
-      const { enabled } = (e as CustomEvent).detail as { enabled: boolean };
-      pulseRef.current = enabled;
-      if (enabled) startPulse(); else stopPulse();
+      const { enabled } = (e as CustomEvent).detail ?? { enabled: false };
+      pulseRef.current = !!enabled;
+      if (!enabled) pulsePhaseRef.current = 0;
     };
-    let pulseAnim: anime.AnimeInstance | null = null;
-    function startPulse() {
-      stopPulse();
-      pulseAnim = anime({
-        targets: cfgRef.current,
-        count: [{ value: cfgRef.current.count + 80, duration: 5000 }, { value: Math.max(80, cfgRef.current.count - 60), duration: 5000 }],
-        round: 1, easing: "easeInOutSine", loop: true, direction: "alternate",
-        update: () => onCfg(new CustomEvent("x", { detail: {} }) as any)
-      });
-    }
-    function stopPulse() { if (pulseAnim) { pulseAnim.pause(); pulseAnim = null; } }
 
-    /* form / disperse */
-    const onForm = (e: Event) => {
-      const { text, cfg } = (e as CustomEvent).detail as { text: string; cfg: Cfg };
-      const { w, h } = sizeRef.current;
+    const rectFromEvent = (ev: MouseEvent) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    };
 
-      const boxW = Math.floor(w * 0.8);
-      const boxH = Math.floor(h * 0.6);
+    const onMouseMove = (ev: MouseEvent) => {
+      const p = rectFromEvent(ev);
+      mouse.current.x = p.x; mouse.current.y = p.y; mouse.current.inside = true;
+    };
+    const onMouseLeave = () => { mouse.current.inside = false; };
+    const onMouseEnter = () => { mouse.current.inside = true; };
 
-      // First pass: sample with current spacing (manual or zero)
-      const first = sampleTextToPoints({
-        width: boxW, height: boxH, text,
-        font: "bold 200px Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto",
-        sampleEvery: 6, threshold: 40, mode: "outline", strokeWidth: 5,
-        letterSpacingPx: cfg.autoDensity ? 0 : cfg.letterSpacingPx
-      });
-
-      let spacingPx = cfg.letterSpacingPx;
-      let desiredCount = cfg.count;
-
-      if (cfg.autoDensity) {
-        // auto spacing grows with font size and desired density
-        const densityGuess = Math.max(0.4, Math.min(0.9, cfg.densityFactor));
-        desiredCount = clamp(Math.round(first.points.length * densityGuess), 120, 1200);
-
-        // spacing ~ 12–28% of fontPx scaled by density; keeps outlines readable
-        spacingPx = clamp(first.fontPx * (0.12 + (densityGuess - 0.4) * 0.2), 2, first.fontPx * 0.3);
+    const onClick = (ev: MouseEvent) => {
+      const p = rectFromEvent(ev);
+      const boids = boidsRef.current;
+      for (let i = 0; i < boids.length; i++) {
+        const b = boids[i]; const dx = b.p.x - p.x, dy = b.p.y - p.y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d < 160) {
+          const s = (160 - d) / 160 * 0.9;
+          b.addForce({ x: (dx / d) * s, y: (dy / d) * s });
+        }
       }
+    };
 
-      // Second pass: resample with final spacing so points follow spacing
-      const final = sampleTextToPoints({
-        width: boxW, height: boxH, text,
-        font: "bold 200px Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto",
-        sampleEvery: 6, threshold: 40, mode: "outline", strokeWidth: 5,
-        letterSpacingPx: spacingPx
-      });
-
-      const points = final.points.map(p => ({ x: p.x + w * 0.1, y: p.y + h * 0.2 }));
-      textTargetsRef.current = points;
-
-      // tell the sim the new desired count (auto) and let onCfg adjust boids
-      if (cfg.autoDensity) {
-        window.dispatchEvent(new CustomEvent("boids/cfg", { detail: { count: desiredCount } }));
+    const onKey = (ev: KeyboardEvent) => {
+      const k = ev.key.toLowerCase();
+      if (k === "f") {
+        const next = { ...cfgRef.current, mouseEnabled: !cfgRef.current.mouseEnabled };
+        cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
+      } else if (k === "r") {
+        const nextMode: RayMode = cfgRef.current.rayMode === "off" ? "neighbours" : "off";
+        const next = { ...cfgRef.current, rayMode: nextMode };
+        cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
+      } else if (k === "h") {
+        const next = { ...cfgRef.current, showHud: !cfgRef.current.showHud };
+        cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
+      } else if (k === "m") {
+        window.dispatchEvent(new CustomEvent("boids/ui/togglePanel"));
       }
-
-      // (Re)map boids to targets
-      const N = boidsRef.current.length;
-      const M = points.length;
-      const map: number[] = new Array(N).fill(-1);
-      const indices = Array.from({ length: M }, (_, i) => i);
-      for (let i = indices.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [indices[i], indices[j]] = [indices[j], indices[i]]; }
-      const use = indices.slice(0, Math.min(N, M));
-      for (let i = 0; i < use.length; i++) map[i] = use[i];
-      mappingRef.current = map;
-      modeRef.current = "forming";
     };
 
-    const onDisperse = () => {
-      modeRef.current = "free";
-      mappingRef.current = [];
-      textTargetsRef.current = [];
-    };
-
+    window.addEventListener("resize", onResize);
     window.addEventListener("boids/cfg", onCfg as EventListener);
     window.addEventListener("boids/pulse", onPulse as EventListener);
-    window.addEventListener("boids/form", onForm as EventListener);
-    window.addEventListener("boids/disperse", onDisperse as EventListener);
-
-    // main loop
-    let raf = 0;
-    const step = () => {
-      raf = requestAnimationFrame(step);
-      const ctx = ctxRef.current!;
-      const { w, h } = sizeRef.current;
-      ctx.fillStyle = "#0b0f13";
-      ctx.fillRect(0, 0, w, h);
-
-      const hue = hueRef.current.hue;
-      const boids = boidsRef.current;
-      const mode = modeRef.current;
-      const targets = textTargetsRef.current;
-      const mapping = mappingRef.current;
-
-      let target: Vec = attractorRef.current;
-      const md = Math.hypot(mouseRef.current.x - target.x, mouseRef.current.y - target.y);
-      if (followAttractorRef.current && mode === "free" && md < Math.min(w, h) * 0.5) {
-        target = mouseRef.current;
-      }
-
-      for (let i = 0; i < boids.length; i++) {
-        const b = boids[i];
-        if (mode === "free") {
-          b.flockWeighted(boids, 0.8, 0.4, 1.0);
-          b.steerTowards(target, attractorRef.current.strength);
-        } else {
-          const idx = mapping[i];
-          if (idx !== undefined && idx >= 0 && idx < targets.length) {
-            const t = targets[idx];
-            const toT = { x: t.x - b.pos.x, y: t.y - b.pos.y };
-            const dist = Math.hypot(toT.x, toT.y);
-
-            const orbitRadius = cfgRef.current.orbitRadius;
-            const repelRadius = cfgRef.current.repelRadius;
-            const orbitStrength = 0.6;
-            const repelStrength = 0.9;
-
-            if (dist > orbitRadius) {
-              b.steerTowards(t, 1.0);
-              b.flockWeighted(boids, 0.25, 0.15, 0.6);
-            } else if (dist > repelRadius) {
-              const tangent = normalize({ x: -toT.y, y: toT.x });
-              b.applyForce(scale(tangent, orbitStrength));
-              b.flockWeighted(boids, 0.2, 0.1, 0.4);
-            } else {
-              const away = normalize({ x: -toT.x, y: -toT.y });
-              b.applyForce(scale(away, repelStrength));
-              b.flockWeighted(boids, 0.0, 0.0, 0.25);
-            }
-          } else {
-            b.steerTowards({ x: w * 0.5, y: h * 0.5 }, 0.12);
-            b.flockWeighted(boids, 0.2, 0.1, 0.5);
-          }
-        }
-        b.update();
-        b.borders(w, h);
-        b.draw(ctx, hue);
-      }
-    };
-    requestAnimationFrame(step);
+    window.addEventListener("keydown", onKey);
+    canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("mouseleave", onMouseLeave);
+    canvas.addEventListener("mouseenter", onMouseEnter);
+    canvas.addEventListener("click", onClick);
 
     return () => {
       window.removeEventListener("resize", onResize);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("keydown", onKey);
       window.removeEventListener("boids/cfg", onCfg as EventListener);
       window.removeEventListener("boids/pulse", onPulse as EventListener);
-      window.removeEventListener("boids/form", onForm as EventListener);
-      window.removeEventListener("boids/disperse", onDisperse as EventListener);
-      clearInterval(wanderId);
-      c.remove();
+      window.removeEventListener("keydown", onKey);
+      canvas.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("mouseleave", onMouseLeave);
+      canvas.removeEventListener("mouseenter", onMouseEnter);
+      canvas.removeEventListener("click", onClick);
+      host?.contains(canvas) && host.removeChild(canvas);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return null;
+  return <div id="boids-canvas-host" style={{ width: "100%", height: "100%", position: "absolute", inset: 0 }} />;
 }
