@@ -42,21 +42,21 @@ export type Cfg = {
   drawMode: DrawMode;
   boidSize: number;
   trailLength: number;
-  trailSampleEvery: number; // frames between trail updates
-  trailOpacity: number;     // 0..1 stroke alpha
+  trailSampleEvery: number;
+  trailOpacity: number;
 
   // Mouse interaction
   mouseEnabled: boolean;
   mouseMode: MouseMode;
-  mouseStrength: number;    // 0..1
-  mouseFalloff: number;     // px
+  mouseStrength: number;
+  mouseFalloff: number;
 
   // Raycasting viz
   rayMode: RayMode;
-  rayNearestK: number;      // K nearest neighbours to draw
-  rayOpacity: number;       // 0..1
-  rayThickness: number;     // px
-  rayLengthScale: number;   // scale for force arrows
+  rayNearestK: number;
+  rayOpacity: number;
+  rayThickness: number;
+  rayLengthScale: number;
 
   // Pulse
   pulseEnabledDefault: boolean;
@@ -90,15 +90,16 @@ export const defaultCfg: Cfg = {
   drawMode: "trail",
   boidSize: 3.0,
   trailLength: 16,
-  trailSampleEvery: 2,  // ← slows trail “gridline” update rate
-  trailOpacity: 0.55,   // ← gentler contrast
+  trailSampleEvery: 2,
+  trailOpacity: 0.55,
 
   mouseEnabled: true,
   mouseMode: "attract",
   mouseStrength: 0.8,
   mouseFalloff: 180,
 
-  rayMode: "neighbours",
+  // IMPORTANT: rays OFF by default → no more “grid lines”
+  rayMode: "off",
   rayNearestK: 3,
   rayOpacity: 0.35,
   rayThickness: 0.75,

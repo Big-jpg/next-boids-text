@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Cfg, defaultCfg } from "@/lib/controls";
+import { Cfg, defaultCfg, type RayMode } from "@/lib/controls";
 
 type Vec = { x: number; y: number };
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
@@ -37,7 +37,6 @@ class Boid {
   }
 
   flock(neighbors: Boid[], cfg: Cfg) {
-    // Alignment / Cohesion / Separation accumulators
     let sumA = { x: 0, y: 0 }, cntA = 0;
     let sumC = { x: 0, y: 0 }, cntC = 0;
     let sumS = { x: 0, y: 0 }, cntS = 0;
@@ -46,12 +45,12 @@ class Boid {
       if (other === this) continue;
       const dx = other.p.x - this.p.x, dy = other.p.y - this.p.y;
       const d = Math.hypot(dx, dy);
-      if (d < cfg.alignRadius)   { sumA.x += other.v.x; sumA.y += other.v.y; cntA++; }
-      if (d < cfg.cohesionRadius){ sumC.x += other.p.x; sumC.y += other.p.y; cntC++; }
+      if (d < cfg.alignRadius) { sumA.x += other.v.x; sumA.y += other.v.y; cntA++; }
+      if (d < cfg.cohesionRadius) { sumC.x += other.p.x; sumC.y += other.p.y; cntC++; }
       if (d < cfg.separationRadius && d > 0.0001) { sumS.x -= dx / d; sumS.y -= dy / d; cntS++; }
     }
 
-    if (cntA) { sumA.x /= cntA; sumA.y /= cntA; this.addForce({ x: sumA.x * cfg.alignStrength,   y: sumA.y * cfg.alignStrength   }); }
+    if (cntA) { sumA.x /= cntA; sumA.y /= cntA; this.addForce({ x: sumA.x * cfg.alignStrength, y: sumA.y * cfg.alignStrength }); }
     if (cntC) { sumC.x = sumC.x / cntC - this.p.x; sumC.y = sumC.y / cntC - this.p.y; this.addForce({ x: sumC.x * cfg.cohesionStrength, y: sumC.y * cfg.cohesionStrength }); }
     if (cntS) { sumS.x /= cntS; sumS.y /= cntS; this.addForce({ x: sumS.x * cfg.separationStrength, y: sumS.y * cfg.separationStrength }); }
   }
@@ -59,7 +58,7 @@ class Boid {
   pdAssist(target: Vec, cfg: Cfg) {
     const k = cfg.pdLockK, d = cfg.pdLockDamp;
     const spring = { x: (target.x - this.p.x) * k, y: (target.y - this.p.y) * k };
-    const damp   = { x: -this.v.x * d, y: -this.v.y * d };
+    const damp = { x: -this.v.x * d, y: -this.v.y * d };
     this.addForce({ x: spring.x + damp.x, y: spring.y + damp.y });
   }
 
@@ -204,18 +203,16 @@ export default function BoidsField() {
     const ang = Math.atan2(b.v.y, b.v.x), s = cfg.boidSize;
     const tip = { x: b.p.x + Math.cos(ang) * (2.0 * s), y: b.p.y + Math.sin(ang) * (2.0 * s) };
     const left = { x: b.p.x + Math.cos(ang + 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang + 2.5) * (1.2 * s) };
-    const right= { x: b.p.x + Math.cos(ang - 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang - 2.5) * (1.2 * s) };
+    const right = { x: b.p.x + Math.cos(ang - 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang - 2.5) * (1.2 * s) };
     ctx.fillStyle = "rgba(220,230,250,0.92)";
     ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(left.x, left.y); ctx.lineTo(right.x, right.y); ctx.closePath(); ctx.fill();
   }
 
   function drawRays(ctx: CanvasRenderingContext2D, b: Boid, all: Boid[], cfg: Cfg) {
     if (cfg.rayMode === "off") return;
-
     ctx.lineWidth = cfg.rayThickness;
 
     if (cfg.rayMode === "neighbours" || cfg.rayMode === "both") {
-      // K nearest by Euclidean distance within max of radii
       const r = Math.max(cfg.alignRadius, cfg.cohesionRadius);
       const neigh = neighborsOf(b, all, r)
         .map(nb => ({ nb, d2: (nb.p.x - b.p.x) ** 2 + (nb.p.y - b.p.y) ** 2 }))
@@ -229,9 +226,6 @@ export default function BoidsField() {
     }
 
     if (cfg.rayMode === "forces" || cfg.rayMode === "both") {
-      // Visualise current force components approximations:
-      //   separation (red-ish), cohesion (green-ish), alignment (blue-ish)
-      // Compute simple local estimates using a small neighbourhood
       const neigh = neighborsOf(b, all, Math.max(cfg.cohesionRadius, cfg.alignRadius));
       let sep = { x: 0, y: 0 }, coh = { x: 0, y: 0 }, ali = { x: 0, y: 0 };
       let cSep = 0, cCoh = 0, cAli = 0;
@@ -240,8 +234,8 @@ export default function BoidsField() {
         const dx = o.p.x - b.p.x, dy = o.p.y - b.p.y;
         const d = Math.hypot(dx, dy);
         if (d < cfg.separationRadius && d > 0.0001) { sep.x -= dx / d; sep.y -= dy / d; cSep++; }
-        if (d < cfg.cohesionRadius)                 { coh.x += o.p.x;  coh.y += o.p.y;  cCoh++; }
-        if (d < cfg.alignRadius)                    { ali.x += o.v.x;  ali.y += o.v.y;  cAli++; }
+        if (d < cfg.cohesionRadius) { coh.x += o.p.x; coh.y += o.p.y; cCoh++; }
+        if (d < cfg.alignRadius) { ali.x += o.v.x; ali.y += o.v.y; cAli++; }
       }
       if (cCoh) { coh.x = coh.x / cCoh - b.p.x; coh.y = coh.y / cCoh - b.p.y; }
 
@@ -295,25 +289,22 @@ export default function BoidsField() {
     }
 
     // Draw pass
-    ctx.lineWidth = 1;
     for (let i = 0; i < boids.length; i++) {
       drawBoid(ctx, boids[i], cfg);
     }
 
-    // Overlay rays (draw on top for legibility)
+    // Optional rays (default off → no “grid lines”)
     if (cfg.rayMode !== "off") {
-      for (let i = 0; i < boids.length; i++) {
-        drawRays(ctx, boids[i], boids, cfg);
-      }
+      for (let i = 0; i < boids.length; i++) drawRays(ctx, boids[i], boids, cfg);
     }
 
-    // HUD
-    ctx.globalAlpha = 0.82;
-    ctx.fillStyle = "rgba(220,230,250,0.75)";
+    // HUD (subtle)
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = "rgba(220,230,250,0.7)";
     ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter";
     ctx.textBaseline = "top";
     ctx.fillText("Boids — Flocking Bench", 12, 12);
-    ctx.fillText("• F: toggle mouse-field  • Click: burst  • Rays: neighbours/forces", 12, 28);
+    ctx.fillText("F: mouse • R: rays • M: panel • Click: burst", 12, 28);
     ctx.globalAlpha = 1;
 
     requestAnimationFrame(loop);
@@ -372,20 +363,29 @@ export default function BoidsField() {
     };
 
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key.toLowerCase() === "f") {
+      const k = ev.key.toLowerCase();
+      if (k === "f") {
         const next = { ...cfgRef.current, mouseEnabled: !cfgRef.current.mouseEnabled };
         cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
+      } else if (k === "r") {
+        const nextMode: RayMode = cfgRef.current.rayMode === "off" ? "neighbours" : "off";
+
+        const next = { ...cfgRef.current, rayMode: nextMode };
+        cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
+      } else if (k === "m") {
+        // relay to panel (it listens with local state). We just fire an event it can ignore safely.
+        window.dispatchEvent(new CustomEvent("boids/ui/togglePanel"));
       }
     };
 
     window.addEventListener("resize", onResize);
     window.addEventListener("boids/cfg", onCfg as EventListener);
     window.addEventListener("boids/pulse", onPulse as EventListener);
+    window.addEventListener("keydown", onKey);
     canvas.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("mouseleave", onMouseLeave);
     canvas.addEventListener("mouseenter", onMouseEnter);
     canvas.addEventListener("click", onClick);
-    window.addEventListener("keydown", onKey);
 
     return () => {
       window.removeEventListener("resize", onResize);
