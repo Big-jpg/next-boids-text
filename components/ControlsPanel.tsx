@@ -1,24 +1,17 @@
+// components/ControlsPanel.tsx
 "use client";
 
 import React from "react";
 import { useBoidsControls } from "@/lib/controls";
 
-type Props = {
-  /** When true (default), panel uses fixed/floating chrome.
-      When false, caller provides outer positioning/animation. */
-  floating?: boolean;
-  style?: React.CSSProperties;
-};
+type Props = { floating?: boolean; style?: React.CSSProperties };
 
 export default function ControlsPanel({ floating = true, style }: Props) {
-  const {
-    text, setText,
-    cfg, setCfg,
-    forming, formText, disperse,
-    pulse, togglePulse
-  } = useBoidsControls();
-
+  const { text, setText, cfg, setCfg, forming, formText, disperse, pulse, togglePulse } = useBoidsControls();
   const outerStyle = floating ? floatingWrapStyle : embeddedWrapStyle;
+
+  const rad2deg = (r: number) => (r * 180) / Math.PI;
+  const deg2rad = (d: number) => (d * Math.PI) / 180;
 
   return (
     <div style={{ ...outerStyle, ...style }}>
@@ -46,32 +39,78 @@ export default function ControlsPanel({ floating = true, style }: Props) {
 
         <Row label={`Count (${cfg.count})`}>
           <input type="range" min={60} max={1200} step={1}
-                 value={cfg.count}
-                 onChange={(e) => setCfg({ ...cfg, count: Number(e.target.value) })}/>
+            value={cfg.count}
+            onChange={(e) => setCfg({ ...cfg, count: Number(e.target.value) })} />
         </Row>
 
         <Row label={`Speed (${cfg.speed.toFixed(2)})`}>
           <input type="range" min={1} max={5} step={0.1}
-                 value={cfg.speed}
-                 onChange={(e) => setCfg({ ...cfg, speed: Number(e.target.value) })}/>
+            value={cfg.speed}
+            onChange={(e) => setCfg({ ...cfg, speed: Number(e.target.value) })} />
         </Row>
 
         <Row label={`Sep (${cfg.separationRadius})`}>
           <input type="range" min={10} max={60} step={1}
-                 value={cfg.separationRadius}
-                 onChange={(e) => setCfg({ ...cfg, separationRadius: Number(e.target.value) })}/>
+            value={cfg.separationRadius}
+            onChange={(e) => setCfg({ ...cfg, separationRadius: Number(e.target.value) })} />
         </Row>
 
         <Row label={`Align (${cfg.alignRadius})`}>
           <input type="range" min={30} max={140} step={1}
-                 value={cfg.alignRadius}
-                 onChange={(e) => setCfg({ ...cfg, alignRadius: Number(e.target.value) })}/>
+            value={cfg.alignRadius}
+            onChange={(e) => setCfg({ ...cfg, alignRadius: Number(e.target.value) })} />
         </Row>
 
         <Row label={`Coh (${cfg.cohesionRadius})`}>
           <input type="range" min={30} max={140} step={1}
-                 value={cfg.cohesionRadius}
-                 onChange={(e) => setCfg({ ...cfg, cohesionRadius: Number(e.target.value) })}/>
+            value={cfg.cohesionRadius}
+            onChange={(e) => setCfg({ ...cfg, cohesionRadius: Number(e.target.value) })} />
+        </Row>
+      </fieldset>
+
+      <fieldset style={fieldsetStyle}>
+        <legend style={legendStyle}>Steering</legend>
+
+        <Row label={`Exact Speed (Forming)`}>
+          <input
+            type="checkbox"
+            checked={cfg.exactSpeedForming}
+            onChange={(e) => setCfg({ ...cfg, exactSpeedForming: e.target.checked })}
+          />
+        </Row>
+
+        <Row label={`PD-Lock Spring (k = ${cfg.pdLockK.toFixed(2)})`}>
+          <input
+            type="range"
+            min={0.05} max={1.0} step={0.01}
+            value={cfg.pdLockK}
+            onChange={(e) => setCfg({ ...cfg, pdLockK: Number(e.target.value) })}
+          />
+        </Row>
+
+        <Row label={`PD-Lock Damping (d = ${cfg.pdLockDamp.toFixed(2)})`}>
+          <input
+            type="range"
+            min={0.05} max={1.0} step={0.01}
+            value={cfg.pdLockDamp}
+            onChange={(e) => setCfg({ ...cfg, pdLockDamp: Number(e.target.value) })}
+          />
+        </Row>
+
+        <Row label={`Max Turn (Free) ${rad2deg(cfg.maxTurnFreeRad).toFixed(0)}°`}>
+          <input
+            type="range" min={5} max={45} step={1}
+            value={Math.round(rad2deg(cfg.maxTurnFreeRad))}
+            onChange={(e) => setCfg({ ...cfg, maxTurnFreeRad: deg2rad(Number(e.target.value)) })}
+          />
+        </Row>
+
+        <Row label={`Max Turn (Forming) ${rad2deg(cfg.maxTurnFormRad).toFixed(0)}°`}>
+          <input
+            type="range" min={5} max={45} step={1}
+            value={Math.round(rad2deg(cfg.maxTurnFormRad))}
+            onChange={(e) => setCfg({ ...cfg, maxTurnFormRad: deg2rad(Number(e.target.value)) })}
+          />
         </Row>
       </fieldset>
 
@@ -80,14 +119,14 @@ export default function ControlsPanel({ floating = true, style }: Props) {
 
         <Row label={`Orbit Radius (${cfg.orbitRadius})`}>
           <input type="range" min={12} max={120} step={1}
-                 value={cfg.orbitRadius}
-                 onChange={(e) => setCfg({ ...cfg, orbitRadius: Number(e.target.value) })}/>
+            value={cfg.orbitRadius}
+            onChange={(e) => setCfg({ ...cfg, orbitRadius: Number(e.target.value) })} />
         </Row>
 
         <Row label={`Repel Radius (${cfg.repelRadius})`}>
           <input type="range" min={4} max={60} step={1}
-                 value={cfg.repelRadius}
-                 onChange={(e) => setCfg({ ...cfg, repelRadius: Number(e.target.value) })}/>
+            value={cfg.repelRadius}
+            onChange={(e) => setCfg({ ...cfg, repelRadius: Number(e.target.value) })} />
         </Row>
       </fieldset>
 
@@ -104,15 +143,15 @@ export default function ControlsPanel({ floating = true, style }: Props) {
 
         <Row label={`Density Factor (${cfg.densityFactor.toFixed(2)})`}>
           <input type="range" min={0.30} max={0.90} step={0.01}
-                 value={cfg.densityFactor}
-                 onChange={(e) => setCfg({ ...cfg, densityFactor: Number(e.target.value) })}/>
+            value={cfg.densityFactor}
+            onChange={(e) => setCfg({ ...cfg, densityFactor: Number(e.target.value) })} />
         </Row>
       </fieldset>
     </div>
   );
 }
 
-/* --- styles & helpers --- */
+/* styles & helpers (unchanged except tiny bits) */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "grid", gridTemplateColumns: "180px 1fr", alignItems: "center", gap: 10, margin: "6px 0" }}>
@@ -123,58 +162,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 const floatingWrapStyle: React.CSSProperties = {
-  position: "fixed",
-  right: 12,
-  bottom: 12,
-  zIndex: 10,
-  width: "min(480px, 92vw)",
-  padding: 12,
-  borderRadius: 12,
+  position: "fixed", right: 12, bottom: 12, zIndex: 10,
+  width: "min(480px, 92vw)", padding: 12, borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.06)",
-  background: "rgba(20,24,32,0.6)",
-  backdropFilter: "blur(8px)",
-  color: "#cbd5e1",
-  fontSize: 13,
+  background: "rgba(20,24,32,0.6)", backdropFilter: "blur(8px)",
+  color: "#cbd5e1", fontSize: 13,
 };
-
-const embeddedWrapStyle: React.CSSProperties = {
-  width: "min(480px, 92vw)",
-  padding: 12,
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.06)",
-  background: "rgba(20,24,32,0.6)",
-  backdropFilter: "blur(8px)",
-  color: "#cbd5e1",
-  fontSize: 13,
-};
-
+const embeddedWrapStyle = { ...floatingWrapStyle, position: "static" as const };
 const smallLabel: React.CSSProperties = { fontSize: 12, opacity: 0.8, marginBottom: 6 };
-
-const textInput: React.CSSProperties = {
-  width: "100%",
-  padding: "8px 10px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.06)",
-  background: "#0f1319",
-  color: "#cbd5e1",
-  outline: "none",
-};
-
-const buttonStyle: React.CSSProperties = {
-  appearance: "none",
-  border: "1px solid rgba(255,255,255,0.06)",
-  background: "#11151c",
-  color: "#cbd5e1",
-  padding: "8px 10px",
-  borderRadius: 10,
-  cursor: "pointer",
-};
-
-const fieldsetStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 12,
-  padding: 10,
-  marginBottom: 12,
-};
-
+const textInput: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "#0f1319", color: "#cbd5e1", outline: "none" };
+const buttonStyle: React.CSSProperties = { appearance: "none", border: "1px solid rgba(255,255,255,0.06)", background: "#11151c", color: "#cbd5e1", padding: "8px 10px", borderRadius: 10, cursor: "pointer" };
+const fieldsetStyle: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 10, marginBottom: 12 };
 const legendStyle: React.CSSProperties = { padding: "0 6px", opacity: 0.9 };

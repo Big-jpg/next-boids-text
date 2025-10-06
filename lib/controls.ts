@@ -16,10 +16,19 @@ export type Cfg = {
   orbitRadius: number;
   repelRadius: number;
 
-  // NEW — density & spacing controls
+  // Steering behaviour
+  exactSpeedForming: boolean;
+  pdLockK: number;     // spring constant
+  pdLockDamp: number;  // damping constant
+
+  // Density & spacing
   autoDensity: boolean;
-  densityFactor: number;     // scales boids from sampled points
-  letterSpacingPx: number;   // manual extra spacing when autoDensity=false
+  densityFactor: number;
+  letterSpacingPx: number;
+
+  // NEW — per-mode turn limits (radians per frame)
+  maxTurnFreeRad: number;
+  maxTurnFormRad: number;
 };
 
 export const defaultCfg: Cfg = {
@@ -34,10 +43,18 @@ export const defaultCfg: Cfg = {
   separationStrength: 1.2,
   orbitRadius: 12,
   repelRadius: 28,
+  exactSpeedForming: true,
+  pdLockK: 0.28,
+  pdLockDamp: 0.48,
+
 
   autoDensity: true,
-  densityFactor: 0.82,   // ~55% of sampled points becomes boids
+  densityFactor: 0.82,
   letterSpacingPx: 0,
+
+  // defaults match what we tested by hand
+  maxTurnFreeRad: 0.22,   // ≈ 12.6°
+  maxTurnFormRad: 0.35,   // ≈ 20.1°
 };
 
 export function useBoidsControls() {
@@ -53,8 +70,7 @@ export function useBoidsControls() {
   const formText = useCallback(() => {
     formingRef.current = true;
     setForming(true);
-    // pass all relevant cfg so the field can compute auto density/spacing
-    dispatch("boids/form", { text, cfg });
+    dispatch("boids/form", { text, cfg }); // pass full cfg so canvas sees turn caps
   }, [text, cfg]);
 
   const disperse = useCallback(() => {
@@ -63,7 +79,6 @@ export function useBoidsControls() {
     dispatch("boids/disperse");
   }, []);
 
-  // keep sim in sync when sliders move
   useEffect(() => {
     dispatch("boids/cfg", cfg);
   }, [cfg]);
