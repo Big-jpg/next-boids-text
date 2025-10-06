@@ -42,24 +42,27 @@ export type Cfg = {
   drawMode: DrawMode;
   boidSize: number;
   trailLength: number;
-  trailSampleEvery: number;
-  trailOpacity: number;
+  trailSampleEvery: number; // frames between trail updates
+  trailOpacity: number;     // 0..1 stroke alpha
 
   // Mouse interaction
   mouseEnabled: boolean;
   mouseMode: MouseMode;
-  mouseStrength: number;
-  mouseFalloff: number;
+  mouseStrength: number;    // 0..1
+  mouseFalloff: number;     // px
 
   // Raycasting viz
   rayMode: RayMode;
-  rayNearestK: number;
-  rayOpacity: number;
-  rayThickness: number;
-  rayLengthScale: number;
+  rayNearestK: number;      // K nearest neighbours to draw
+  rayOpacity: number;       // 0..1
+  rayThickness: number;     // px
+  rayLengthScale: number;   // scale for force arrows
 
   // Pulse
   pulseEnabledDefault: boolean;
+
+  // HUD
+  showHud: boolean;
 };
 
 export const defaultCfg: Cfg = {
@@ -82,8 +85,8 @@ export const defaultCfg: Cfg = {
   pdLockK: 0.28,
   pdLockDamp: 0.52,
 
-  maxTurnFreeRad: 0.22,
-  maxTurnFormRad: 0.35,
+  maxTurnFreeRad: 0.22,   // ~12.6°
+  maxTurnFormRad: 0.35,   // ~20.1°
 
   regime: "pure",
 
@@ -98,7 +101,7 @@ export const defaultCfg: Cfg = {
   mouseStrength: 0.8,
   mouseFalloff: 180,
 
-  // IMPORTANT: rays OFF by default → no more “grid lines”
+  // Rays OFF by default → no “grid lines”
   rayMode: "off",
   rayNearestK: 3,
   rayOpacity: 0.35,
@@ -106,6 +109,9 @@ export const defaultCfg: Cfg = {
   rayLengthScale: 18,
 
   pulseEnabledDefault: false,
+
+  // HUD is opt-in (toggle with H)
+  showHud: false,
 };
 
 export function useBoidsControls() {

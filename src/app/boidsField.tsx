@@ -9,25 +9,37 @@ const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 const TWO_PI = Math.PI * 2;
 
 class Boid {
-  p: Vec; v: Vec; a: Vec = { x: 0, y: 0 };
+  p: Vec;
+  v: Vec;
+  a: Vec = { x: 0, y: 0 };
   trail?: Vec[];
 
   constructor(p: Vec, v: Vec, trailCap: number) {
     this.p = { ...p };
     this.v = { ...v };
-    if (trailCap > 0) this.trail = new Array(trailCap).fill(0).map(() => ({ x: p.x, y: p.y }));
+    if (trailCap > 0) {
+      this.trail = new Array(trailCap).fill(0).map(() => ({ x: p.x, y: p.y }));
+    }
   }
 
-  addForce(f: Vec) { this.a.x += f.x; this.a.y += f.y; }
+  addForce(f: Vec) {
+    this.a.x += f.x;
+    this.a.y += f.y;
+  }
+
   limitForce(max: number) {
     const m = Math.hypot(this.a.x, this.a.y);
-    if (m > max && m > 0) { this.a.x = (this.a.x / m) * max; this.a.y = (this.a.y / m) * max; }
+    if (m > max && m > 0) {
+      this.a.x = (this.a.x / m) * max;
+      this.a.y = (this.a.y / m) * max;
+    }
   }
 
   steerHeading(desired: Vec, cfg: Cfg, assist: boolean) {
     const m = Math.hypot(desired.x, desired.y) || 1;
     const ds = { x: (desired.x / m) * cfg.speed, y: (desired.y / m) * cfg.speed };
-    const vAng = Math.atan2(this.v.y, this.v.x), dsAng = Math.atan2(ds.y, ds.x);
+    const vAng = Math.atan2(this.v.y, this.v.x);
+    const dsAng = Math.atan2(ds.y, ds.x);
     let dAng = ((dsAng - vAng + Math.PI) % TWO_PI) - Math.PI;
     const cap = assist ? cfg.maxTurnFormRad : cfg.maxTurnFreeRad;
     const turn = clamp(dAng, -cap, cap);
@@ -45,12 +57,12 @@ class Boid {
       if (other === this) continue;
       const dx = other.p.x - this.p.x, dy = other.p.y - this.p.y;
       const d = Math.hypot(dx, dy);
-      if (d < cfg.alignRadius) { sumA.x += other.v.x; sumA.y += other.v.y; cntA++; }
+      if (d < cfg.alignRadius)    { sumA.x += other.v.x; sumA.y += other.v.y; cntA++; }
       if (d < cfg.cohesionRadius) { sumC.x += other.p.x; sumC.y += other.p.y; cntC++; }
       if (d < cfg.separationRadius && d > 0.0001) { sumS.x -= dx / d; sumS.y -= dy / d; cntS++; }
     }
 
-    if (cntA) { sumA.x /= cntA; sumA.y /= cntA; this.addForce({ x: sumA.x * cfg.alignStrength, y: sumA.y * cfg.alignStrength }); }
+    if (cntA) { sumA.x /= cntA; sumA.y /= cntA; this.addForce({ x: sumA.x * cfg.alignStrength,    y: sumA.y * cfg.alignStrength }); }
     if (cntC) { sumC.x = sumC.x / cntC - this.p.x; sumC.y = sumC.y / cntC - this.p.y; this.addForce({ x: sumC.x * cfg.cohesionStrength, y: sumC.y * cfg.cohesionStrength }); }
     if (cntS) { sumS.x /= cntS; sumS.y /= cntS; this.addForce({ x: sumS.x * cfg.separationStrength, y: sumS.y * cfg.separationStrength }); }
   }
@@ -58,7 +70,7 @@ class Boid {
   pdAssist(target: Vec, cfg: Cfg) {
     const k = cfg.pdLockK, d = cfg.pdLockDamp;
     const spring = { x: (target.x - this.p.x) * k, y: (target.y - this.p.y) * k };
-    const damp = { x: -this.v.x * d, y: -this.v.y * d };
+    const damp   = { x: -this.v.x * d, y: -this.v.y * d };
     this.addForce({ x: spring.x + damp.x, y: spring.y + damp.y });
   }
 
@@ -86,38 +98,56 @@ class Boid {
       if (vmag > vmax) { this.v.x = (this.v.x / vmag) * vmax; this.v.y = (this.v.y / vmag) * vmax; }
     }
 
+    // Trail sampling with jump guard — if we wrapped or jumped far, reset trail
     if (this.trail && frame % sampleEvery === 0) {
-      this.trail.pop(); this.trail.unshift({ x: this.p.x, y: this.p.y });
+      const last = this.trail[0];
+      const dx = this.p.x - last.x, dy = this.p.y - last.y;
+      const jump = Math.hypot(dx, dy);
+      const jumpThresh = 0.4 * Math.min((window as any).__boidsW || 9999, (window as any).__boidsH || 9999);
+      if (jump > jumpThresh) {
+        this.trail.fill({ x: this.p.x, y: this.p.y });
+      } else {
+        this.trail.pop();
+        this.trail.unshift({ x: this.p.x, y: this.p.y });
+      }
     }
 
     this.p.x += this.v.x; this.p.y += this.v.y;
     this.a.x = 0; this.a.y = 0;
   }
 
-  borders(w: number, h: number) {
-    if (this.p.x < -8) this.p.x = w + 8;
-    if (this.p.y < -8) this.p.y = h + 8;
-    if (this.p.x > w + 8) this.p.x = -8;
-    if (this.p.y > h + 8) this.p.y = -8;
+  // return whether we wrapped this frame
+  borders(w: number, h: number): boolean {
+    let wrapped = false;
+    if (this.p.x < -8) { this.p.x = w + 8; wrapped = true; }
+    if (this.p.y < -8) { this.p.y = h + 8; wrapped = true; }
+    if (this.p.x > w + 8) { this.p.x = -8; wrapped = true; }
+    if (this.p.y > h + 8) { this.p.y = -8; wrapped = true; }
+    return wrapped;
   }
 }
 
 export default function BoidsField() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const wRef = useRef(0); const hRef = useRef(0);
+  const wRef = useRef(0);
+  const hRef = useRef(0);
+
   const cfgRef = useRef<Cfg>(defaultCfg);
   const boidsRef = useRef<Boid[]>([]);
-  const pulseRef = useRef(false); const pulsePhaseRef = useRef(0);
+  const pulseRef = useRef(false);
+  const pulsePhaseRef = useRef(0);
   const frameRef = useRef(0);
 
   // mouse field
   const mouse = useRef({ x: 0, y: 0, inside: false });
 
   function neighborsOf(b: Boid, all: Boid[], radius: number): Boid[] {
-    const r2 = radius * radius, out: Boid[] = [];
+    const r2 = radius * radius;
+    const out: Boid[] = [];
     for (let i = 0; i < all.length; i++) {
-      const o = all[i]; if (o === b) continue;
+      const o = all[i];
+      if (o === b) continue;
       const dx = o.p.x - b.p.x, dy = o.p.y - b.p.y;
       if (dx * dx + dy * dy <= r2) out.push(o);
     }
@@ -125,12 +155,15 @@ export default function BoidsField() {
   }
 
   function resize() {
-    const c = canvasRef.current!; const DPR = window.devicePixelRatio || 1;
+    const c = canvasRef.current!;
+    const DPR = window.devicePixelRatio || 1;
     const rect = c.getBoundingClientRect();
     wRef.current = Math.max(320, Math.floor(rect.width));
     hRef.current = Math.max(240, Math.floor(rect.height));
-    c.width = Math.floor(wRef.current * DPR); c.height = Math.floor(hRef.current * DPR);
-    const ctx = c.getContext("2d")!; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    c.width = Math.floor(wRef.current * DPR);
+    c.height = Math.floor(hRef.current * DPR);
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctxRef.current = ctx;
   }
 
@@ -150,8 +183,9 @@ export default function BoidsField() {
   function ensurePopulation() {
     const need = cfgRef.current.count, cur = boidsRef.current.length;
     if (cur === need) return;
-    const trailCap = cfgRef.current.drawMode === "trail" ? cfgRef.current.trailLength : 0;
     const w = wRef.current, h = hRef.current;
+    const trailCap = cfgRef.current.drawMode === "trail" ? cfgRef.current.trailLength : 0;
+
     if (cur < need) {
       for (let i = 0; i < need - cur; i++) {
         const p = { x: Math.random() * w, y: Math.random() * h };
@@ -167,8 +201,10 @@ export default function BoidsField() {
   function applyMouseField(b: Boid, cfg: Cfg) {
     if (!cfg.mouseEnabled || !mouse.current.inside || cfg.mouseStrength <= 0) return;
     const dx = mouse.current.x - b.p.x, dy = mouse.current.y - b.p.y;
-    const d = Math.hypot(dx, dy) || 1; if (d > cfg.mouseFalloff) return;
-    const fall = 1 - d / cfg.mouseFalloff; const s = cfg.mouseStrength * fall;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > cfg.mouseFalloff) return;
+    const fall = 1 - d / cfg.mouseFalloff;
+    const s = cfg.mouseStrength * fall;
     const dir = { x: dx / d, y: dy / d };
     if (cfg.mouseMode === "attract") b.addForce({ x: dir.x * s, y: dir.y * s });
     else b.addForce({ x: -dir.x * s, y: -dir.y * s });
@@ -179,6 +215,9 @@ export default function BoidsField() {
     ctx.lineWidth = 1;
     for (let i = b.trail.length - 1; i >= 1; i--) {
       const p1 = b.trail[i - 1], p2 = b.trail[i];
+      // skip drawing if segment is a big jump (edge wrap)
+      const jumpThresh = 0.35 * Math.min((window as any).__boidsW || 9999, (window as any).__boidsH || 9999);
+      if (Math.hypot(p2.x - p1.x, p2.y - p1.y) > jumpThresh) continue;
       const alpha = cfg.trailOpacity * (i / b.trail.length);
       ctx.strokeStyle = `rgba(220,230,250,${alpha})`;
       ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
@@ -201,8 +240,8 @@ export default function BoidsField() {
 
     // triangle
     const ang = Math.atan2(b.v.y, b.v.x), s = cfg.boidSize;
-    const tip = { x: b.p.x + Math.cos(ang) * (2.0 * s), y: b.p.y + Math.sin(ang) * (2.0 * s) };
-    const left = { x: b.p.x + Math.cos(ang + 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang + 2.5) * (1.2 * s) };
+    const tip =   { x: b.p.x + Math.cos(ang) * (2.0 * s), y: b.p.y + Math.sin(ang) * (2.0 * s) };
+    const left =  { x: b.p.x + Math.cos(ang + 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang + 2.5) * (1.2 * s) };
     const right = { x: b.p.x + Math.cos(ang - 2.5) * (1.2 * s), y: b.p.y + Math.sin(ang - 2.5) * (1.2 * s) };
     ctx.fillStyle = "rgba(220,230,250,0.92)";
     ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(left.x, left.y); ctx.lineTo(right.x, right.y); ctx.closePath(); ctx.fill();
@@ -234,8 +273,8 @@ export default function BoidsField() {
         const dx = o.p.x - b.p.x, dy = o.p.y - b.p.y;
         const d = Math.hypot(dx, dy);
         if (d < cfg.separationRadius && d > 0.0001) { sep.x -= dx / d; sep.y -= dy / d; cSep++; }
-        if (d < cfg.cohesionRadius) { coh.x += o.p.x; coh.y += o.p.y; cCoh++; }
-        if (d < cfg.alignRadius) { ali.x += o.v.x; ali.y += o.v.y; cAli++; }
+        if (d < cfg.cohesionRadius)                 { coh.x += o.p.x;  coh.y += o.p.y;  cCoh++; }
+        if (d < cfg.alignRadius)                    { ali.x += o.v.x;  ali.y += o.v.y;  cAli++; }
       }
       if (cCoh) { coh.x = coh.x / cCoh - b.p.x; coh.y = coh.y / cCoh - b.p.y; }
 
@@ -256,8 +295,12 @@ export default function BoidsField() {
   }
 
   function loop() {
-    const ctx = ctxRef.current!; const w = wRef.current; const h = hRef.current;
-    const cfg = cfgRef.current; const boids = boidsRef.current;
+    const ctx = ctxRef.current!;
+    const w = wRef.current, h = hRef.current;
+    (window as any).__boidsW = w; (window as any).__boidsH = h;
+
+    const cfg = cfgRef.current;
+    const boids = boidsRef.current;
     frameRef.current++;
 
     if (pulseRef.current) {
@@ -285,37 +328,47 @@ export default function BoidsField() {
       }
 
       b.integrate(cfg, cfg.regime !== "pure", frameRef.current, Math.max(1, cfg.trailSampleEvery));
-      b.borders(w, h);
+      const wrapped = b.borders(w, h);
+      if (wrapped && b.trail) {
+        // break trail on wrap to avoid straight edge-to-edge lines
+        b.trail.fill({ x: b.p.x, y: b.p.y });
+      }
     }
 
     // Draw pass
-    for (let i = 0; i < boids.length; i++) {
-      drawBoid(ctx, boids[i], cfg);
-    }
+    for (let i = 0; i < boids.length; i++) drawBoid(ctx, boids[i], cfg);
 
     // Optional rays (default off → no “grid lines”)
     if (cfg.rayMode !== "off") {
       for (let i = 0; i < boids.length; i++) drawRays(ctx, boids[i], boids, cfg);
     }
 
-    // HUD (subtle)
-    ctx.globalAlpha = 0.72;
-    ctx.fillStyle = "rgba(220,230,250,0.7)";
-    ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter";
-    ctx.textBaseline = "top";
-    ctx.fillText("Boids — Flocking Bench", 12, 12);
-    ctx.fillText("F: mouse • R: rays • M: panel • Click: burst", 12, 28);
-    ctx.globalAlpha = 1;
+    // HUD (toggleable; default OFF)
+    if (cfg.showHud) {
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = "rgba(220,230,250,0.7)";
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter";
+      ctx.textBaseline = "top";
+      ctx.fillText("Boids — Flocking Bench", 12, 12);
+      ctx.fillText("F: mouse • R: rays • M: panel • H: HUD • Click: burst", 12, 28);
+      ctx.globalAlpha = 1;
+    }
 
     requestAnimationFrame(loop);
   }
 
   useEffect(() => {
-    const canvas = document.createElement("canvas");
-    canvasRef.current = canvas;
-    canvas.style.width = "100%"; canvas.style.height = "100%";
-    canvas.style.display = "block";
+    // ensure single canvas (prevents doubled HUD/ghost canvas)
     const host = document.getElementById("boids-canvas-host");
+    const existing = document.getElementById("boids-canvas") as HTMLCanvasElement | null;
+    if (existing && host?.contains(existing)) host.removeChild(existing);
+
+    const canvas = document.createElement("canvas");
+    canvas.id = "boids-canvas";
+    canvasRef.current = canvas;
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.display = "block";
     host?.appendChild(canvas);
 
     resize();
@@ -334,7 +387,8 @@ export default function BoidsField() {
 
     const onPulse = (e: Event) => {
       const { enabled } = (e as CustomEvent).detail ?? { enabled: false };
-      pulseRef.current = !!enabled; if (!enabled) pulsePhaseRef.current = 0;
+      pulseRef.current = !!enabled;
+      if (!enabled) pulsePhaseRef.current = 0;
     };
 
     const rectFromEvent = (ev: MouseEvent) => {
@@ -369,11 +423,12 @@ export default function BoidsField() {
         cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
       } else if (k === "r") {
         const nextMode: RayMode = cfgRef.current.rayMode === "off" ? "neighbours" : "off";
-
         const next = { ...cfgRef.current, rayMode: nextMode };
         cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
+      } else if (k === "h") {
+        const next = { ...cfgRef.current, showHud: !cfgRef.current.showHud };
+        cfgRef.current = next; window.dispatchEvent(new CustomEvent("boids/cfg", { detail: next }));
       } else if (k === "m") {
-        // relay to panel (it listens with local state). We just fire an event it can ignore safely.
         window.dispatchEvent(new CustomEvent("boids/ui/togglePanel"));
       }
     };
@@ -396,7 +451,7 @@ export default function BoidsField() {
       canvas.removeEventListener("mouseleave", onMouseLeave);
       canvas.removeEventListener("mouseenter", onMouseEnter);
       canvas.removeEventListener("click", onClick);
-      host?.removeChild(canvas);
+      host?.contains(canvas) && host.removeChild(canvas);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
